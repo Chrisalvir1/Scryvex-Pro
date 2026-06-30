@@ -34,13 +34,13 @@
       ]
    },
    "dependencies": {
-      "@types/node": "^22.10.2",
       "sharp": "^0.33.5",
       "whatwg-mimetype": "^4.0.0"
    },
    "devDependencies": {
       "@scrypted/common": "file:../../common",
       "@scrypted/sdk": "file:../../sdk",
+      "@types/node": "^24.13.2",
       "@types/whatwg-mimetype": "^3.0.2"
    }
 }

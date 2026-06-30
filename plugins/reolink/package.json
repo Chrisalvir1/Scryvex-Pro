@@ -43,6 +43,6 @@
    },
    "devDependencies": {
       "@scrypted/sdk": "file:../../sdk",
-      "@types/node": "^22.19.1"
+      "@types/node": "^24.13.2"
    }
 }

@@ -44,7 +44,7 @@
    },
    "devDependencies": {
       "@types/content-type": "^1.1.8",
-      "@types/node": "^22.19.3",
+      "@types/node": "^24.13.2",
       "@types/xml2js": "^0.4.14"
    }
 }
