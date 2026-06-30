@@ -4,8 +4,12 @@
         "target": "ES2021",
         "resolveJsonModule": true,
         "moduleResolution": "node",
+        "ignoreDeprecations": "6.0",
         "esModuleInterop": true,
         "sourceMap": true,
+        "strict": false,
+        "noImplicitAny": false,
+        "strictNullChecks": false,
         "baseUrl": ".",
         "paths": {
             "@scrypted/sdk": [

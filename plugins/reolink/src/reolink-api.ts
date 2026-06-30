@@ -94,8 +94,8 @@ export const isDeviceHomeHub = (deviceInfo: DevInfo) => deviceInfo?.exactType ==
 
 export class ReolinkCameraClient {
     credential: AuthFetchCredentialState;
-    parameters: Record<string, string>;
-    tokenLease: number;
+    parameters!: Record<string, string>;
+    tokenLease!: number;
 
     constructor(public host: string, public username: string, public password: string, public channelId: number, public console: Console, public readonly forceToken?: boolean) {
         this.credential = {
@@ -136,7 +136,7 @@ export class ReolinkCameraClient {
         }
 
         const { parameters, leaseTimeSeconds } = await getLoginParameters(this.host, this.username, this.password, this.forceToken);
-        this.parameters = parameters;
+        this.parameters = parameters as any;
         this.tokenLease = Date.now() + 1000 * leaseTimeSeconds;
     }
 
@@ -161,7 +161,7 @@ export class ReolinkCameraClient {
             }]));
             this.console.log('successfully logged out previous session');
         } catch (e) {
-            this.console.warn('failed to logout previous session:', e.message);
+            this.console.warn('failed to logout previous session:', (e as any).message);
         }
     }
 
@@ -230,7 +230,7 @@ export class ReolinkCameraClient {
             method: 'POST',
         }, this.createReadable(body));
 
-        const error = response.body?.find(elem => elem.error)?.error;
+        const error = response.body?.find((elem: any) => elem.error)?.error;
         if (error) {
             this.console.error('error during call to getOsd', error);
         }
@@ -260,7 +260,7 @@ export class ReolinkCameraClient {
             method: 'POST',
         }, this.createReadable(body));
 
-        const error = response.body?.find(elem => elem.error)?.error;
+        const error = response.body?.find((elem: any) => elem.error)?.error;
         if (error) {
             this.console.error('error during call to getOsd', error);
         }
@@ -386,8 +386,8 @@ export class ReolinkCameraClient {
             responseType: 'json'
         }, this.createReadable(body));
 
-        const chnTypeInfo = additionalInfoResponse?.body?.find(elem => elem.cmd === 'GetChnTypeInfo');
-        const chnStatus = additionalInfoResponse?.body?.find(elem => elem.cmd === 'GetChannelstatus');
+        const chnTypeInfo = additionalInfoResponse?.body?.find((elem: any) => elem.cmd === 'GetChnTypeInfo');
+        const chnStatus = additionalInfoResponse?.body?.find((elem: any) => elem.cmd === 'GetChannelstatus');
 
         if (chnTypeInfo?.value) {
             deviceInfo.firmVer = chnTypeInfo.value.firmVer;
@@ -396,7 +396,7 @@ export class ReolinkCameraClient {
         }
 
         if (chnStatus?.value) {
-            const specificChannelStatus = chnStatus.value?.status?.find(elem => elem.channel === this.channelId);
+            const specificChannelStatus = chnStatus.value?.status?.find((elem: any) => elem.channel === this.channelId);
 
             if (specificChannelStatus) {
                 deviceInfo.name = specificChannelStatus.name;
@@ -425,7 +425,7 @@ export class ReolinkCameraClient {
             responseType: 'json',
             method: 'POST'
         }, this.createReadable(body));
-        return response.body?.[0]?.value?.PtzPreset?.filter(preset => preset.enable === 1);
+        return response.body?.[0]?.value?.PtzPreset?.filter((preset: any) => preset.enable === 1);
     }
 
     private async ptzOp(op: string, speed: number, id?: number) {
@@ -501,23 +501,23 @@ export class ReolinkCameraClient {
         }
 
         let op = '';
-        if (command.pan < 0)
+        if ((command.pan || 0) < 0)
             op += 'Left';
-        else if (command.pan > 0)
+        else if ((command.pan || 0) > 0)
             op += 'Right'
-        if (command.tilt < 0)
+        if ((command.tilt || 0) < 0)
             op += 'Down';
-        else if (command.tilt > 0)
+        else if ((command.tilt || 0) > 0)
             op += 'Up';
 
         if (op) {
             await this.ptzOp(op, Math.ceil(Math.abs(command?.pan || command?.tilt || 1) * 10));
         }
 
-        op = undefined;
-        if (command.zoom < 0)
+        op = '';
+        if ((command.zoom || 0) < 0)
             op = 'ZoomDec';
-        else if (command.zoom > 0)
+        else if ((command.zoom || 0) > 0)
             op = 'ZoomInc';
 
         if (op) {
@@ -664,14 +664,14 @@ export class ReolinkCameraClient {
             method: 'POST',
         }, this.createReadable(body));
 
-        const error = response.body?.find(elem => elem.error)?.error;
+        const error = response.body?.find((elem: any) => elem.error)?.error;
         if (error) {
             this.console.error('error during call to getBatteryInfo', error);
         }
 
-        const batteryInfoEntry = response.body.find(entry => entry.cmd === 'GetBatteryInfo')?.value?.Battery;
-        const channelStatusEntry = response.body.find(entry => entry.cmd === 'GetChannelstatus')?.value?.status
-            ?.find(chStatus => chStatus.channel === this.channelId)
+        const batteryInfoEntry = response.body.find((entry: any) => entry.cmd === 'GetBatteryInfo')?.value?.Battery;
+        const channelStatusEntry = response.body.find((entry: any) => entry.cmd === 'GetChannelstatus')?.value?.status
+            ?.find((chStatus: any) => chStatus.channel === this.channelId)
 
         return {
             batteryPercent: batteryInfoEntry?.batteryPercent,
@@ -696,7 +696,7 @@ export class ReolinkCameraClient {
             method: 'POST',
         }, this.createReadable(body));
 
-        const error = response.body?.find(elem => elem.error)?.error;
+        const error = response.body?.find((elem: any) => elem.error)?.error;
         if (error) {
             this.console.error('error during call to getEvents', error);
         }
@@ -794,9 +794,9 @@ export class ReolinkCameraClient {
             this.console.error('error during call to getLocalLink', JSON.stringify(body), error);
         }
 
-        const activeLink = response.body?.find(entry => entry.cmd === 'GetLocalLink')
+        const activeLink = response.body?.find((entry: any) => entry.cmd === 'GetLocalLink')
             ?.value?.LocalLink?.activeLink;
-        const wifiSignal = response.body?.find(entry => entry.cmd === 'GetWifiSignal')
+        const wifiSignal = response.body?.find((entry: any) => entry.cmd === 'GetWifiSignal')
             ?.value?.wifiSignal ?? undefined
 
         let isWifi = false;

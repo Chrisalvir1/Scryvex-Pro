@@ -30,15 +30,15 @@ function channelToCameraNumber(channel: string) {
 }
 
 export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom, Reboot, ObjectDetector, VideoCameraConfiguration, VideoTextOverlays, PanTiltZoom {
-    detectedChannels: Promise<Map<string, MediaStreamOptions>>;
+    detectedChannels!: Promise<Map<string, MediaStreamOptions>>;
     onvifIntercom = new OnvifIntercom(this);
-    activeIntercom: Awaited<ReturnType<typeof startRtpForwarderProcess>>;
-    hasSmartDetection: boolean;
-    supplementLight: HikvisionSupplementalLight;
-    alarm: HikvisionAlarmSwitch;
-    ptzPresets: string[];
+    activeIntercom!: Awaited<ReturnType<typeof startRtpForwarderProcess>>;
+    hasSmartDetection!: boolean;
+    supplementLight!: HikvisionSupplementalLight;
+    alarm!: HikvisionAlarmSwitch;
+    ptzPresets!: string[];
 
-    client: HikvisionAPI;
+    client!: HikvisionAPI;
 
     constructor(nativeId: string, provider: RtspProvider) {
         super(nativeId, provider);
@@ -75,6 +75,8 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
         const overlays = await client.getOverlay();
         // find the overlay by id
         const overlay = overlays.json.VideoOverlay.TextOverlayList?.[0]?.TextOverlay.find(o => o.id[0] === id);
+        if (!overlay)
+            return;
         overlay.enabled[0] = value.text ? 'true' : 'false';
         if (typeof value.text === 'string')
             overlay.displayText = [value.text];
@@ -124,7 +126,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
 
     async listenEvents() {
         let motionTimeout: NodeJS.Timeout;
-        const api = (this.provider as HikvisionProvider).createSharedClient(this.getHttpAddress(), this.getUsername(), this.getPassword());
+        const api = (this.provider as HikvisionProvider).createSharedClient(this.getHttpAddress() || '', this.getUsername() || '', this.getPassword() || '');
         const events = await api.listenEvents();
 
         let ignoreCameraNumber: boolean;
@@ -186,7 +188,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
             }
         });
 
-        let inputDimensions: [number, number];
+        let inputDimensions: [number, number] | undefined = undefined;
 
         events.on('smart', async (data: string, image: Buffer) => {
             if (!this.hasSmartDetection) {
@@ -205,13 +207,13 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
             }
 
             const now = Date.now();
-            let detections: ObjectDetectionResult[] = xml.EventNotificationAlert?.DetectionRegionList?.map(region => {
+            let detections: ObjectDetectionResult[] = xml.EventNotificationAlert?.DetectionRegionList?.map((region: any) => {
                 const name = region?.DetectionRegionEntry?.[0]?.detectionTarget?.name;
                 if (!name)
                     return;
                 return {
                     score: 1,
-                    className: detectionMap[name] || name,
+                    className: (detectionMap as Record<string, string>)[name] || name,
                     // boundingBox: [
                     //     parseInt(X),
                     //     parseInt(Y),
@@ -243,11 +245,11 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
             //     }
             // }
 
-            let detectionId: string;
+            let detectionId: string | undefined = undefined;
             if (image) {
                 detectionId = crypto.randomBytes(4).toString('hex');
                 this.recentDetections.set(detectionId, image);
-                setTimeout(() => this.recentDetections.delete(detectionId), 10000);
+                setTimeout(() => this.recentDetections.delete(detectionId!), 10000);
             }
 
             const detected: ObjectsDetected = {
@@ -269,7 +271,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
     async getDetectionInput(detectionId: string, eventId?: any): Promise<MediaObject> {
         const image = this.recentDetections.get(detectionId);
         if (!image)
-            return;
+            throw new Error('Detection image not found');
         return mediaManager.createMediaObject(image, 'image/jpeg');
     }
 
@@ -282,7 +284,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
     }
 
     createClient(): HikvisionAPI {
-        return new HikvisionCameraAPI(this.getHttpAddress(), this.getUsername(), this.getPassword(), this.console);
+        return new HikvisionCameraAPI(this.getHttpAddress() || '', this.getUsername() || '', this.getPassword() || '', this.console);
     }
 
     getClient() {
@@ -293,7 +295,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
 
     async takeSmartCameraPicture(options?: RequestPictureOptions): Promise<MediaObject> {
         const api = this.getClient();
-        return mediaManager.createMediaObject(await api.jpegSnapshot(this.getRtspChannel(), options?.timeout), 'image/jpeg');
+        return mediaManager.createMediaObject(await api.jpegSnapshot(this.getRtspChannel() || '', options?.timeout || 10000), 'image/jpeg');
     }
 
     async getRtspUrlSettings(): Promise<Setting[]> {
@@ -330,7 +332,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
     }
 
     getCameraNumber() {
-        return channelToCameraNumber(this.getRtspChannel());
+        return channelToCameraNumber(this.getRtspChannel() || '');
     }
 
     getRtspUrlParams() {
@@ -358,8 +360,8 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
 
                 const defaultMap = new Map<string, MediaStreamOptions>();
                 const camNumber = this.getCameraNumber() || '1';
-                defaultMap.set(camNumber + '01', undefined);
-                defaultMap.set(camNumber + '02', undefined);
+                defaultMap.set(camNumber + '01', undefined as any);
+                defaultMap.set(camNumber + '02', undefined as any);
 
                 if (isOld) {
                     this.console.error('Old NVR. Defaulting to two camera configuration');
@@ -380,7 +382,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
                     }
                     const ret = new Map<string, MediaStreamOptions>();
                     for (const streamingChannel of channels) {
-                        const channel = streamingChannel.id;
+                        const channel = streamingChannel.id || '';
                         ret.set(channel, streamingChannel);
                     }
 
@@ -388,7 +390,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
                 }
                 catch (e) {
                     this.console.error('error retrieving channel ids', e);
-                    this.detectedChannels = undefined;
+                    this.detectedChannels = Promise.resolve(defaultMap);
                     return defaultMap;
                 }
             })();
@@ -406,7 +408,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
             if (cameraNumber && channelToCameraNumber(id) !== cameraNumber)
                 continue;
             const mso = createRtspMediaStreamOptions(`rtsp://${this.getRtspAddress()}/ISAPI/Streaming/channels/${id}/${params}`, index++);
-            Object.assign(mso.video, channel?.video);
+            Object.assign(mso.video!, channel?.video || {});
             mso.tool = 'scrypted';
             ret.push(mso);
         }
@@ -430,7 +432,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
         const ptzCapabilities = JSON.parse(this.storage.getItem('ptzCapabilities') || '[]') as string[];
 
         const interfaces = this.provider.getInterfaces();
-        let type: ScryptedDeviceType = undefined;
+        let type: ScryptedDeviceType = ScryptedDeviceType.Camera;
         if (isDoorbell) {
             type = ScryptedDeviceType.Doorbell;
             interfaces.push(ScryptedInterface.BinarySensor)
@@ -450,7 +452,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
             interfaces.push(ScryptedInterface.PanTiltZoom);
         }
 
-        this.provider.updateDevice(this.nativeId, this.name, interfaces, type);
+        this.provider.updateDevice(this.nativeId || '', (this.name as string) || '', interfaces, type);
     }
 
     async fetchPtzPresets() {
@@ -518,8 +520,8 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
             this.updatePtzCaps(value as string[]);
         }
 
-        this.client = undefined;
-        this.detectedChannels = undefined;
+        this.client = undefined as any;
+        this.detectedChannels = undefined as any;
         super.putSetting(key, typeof value === 'string' ? value : JSON.stringify(value));
 
         this.updateDevice();
@@ -543,7 +545,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
         if (!isDoorbell)
             choices.unshift('None');
 
-        twoWayAudio = choices.find(c => c === twoWayAudio);
+        twoWayAudio = choices.find(c => c === twoWayAudio) || null;
 
         if (!twoWayAudio)
             twoWayAudio = isDoorbell ? 'Hikvision' : 'None';
@@ -683,15 +685,15 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
 
     async releaseDevice(id: string, nativeId: string) {
         if (nativeId.endsWith('-supplementlight'))
-            delete this.supplementLight;
+            this.supplementLight = undefined as any;
         else if (nativeId.endsWith('-alarm'))
-            delete this.alarm;
+            this.alarm = undefined as any;
     }
 
     async startIntercom(media: MediaObject): Promise<void> {
         if (this.storage.getItem('twoWayAudio') === 'ONVIF') {
             this.activeIntercom?.kill();
-            this.activeIntercom = undefined;
+            this.activeIntercom = undefined as any;
             const options = await this.getConstructedVideoStreamOptions();
             const stream = options[0];
             this.onvifIntercom.url = stream.url;
@@ -699,7 +701,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
         }
 
         const channel = this.getRtspChannel() || '1';
-        let codec: string;
+        let codec: string | undefined = undefined;
         let format: string;
 
         try {
@@ -809,7 +811,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
 
     async stopIntercom(): Promise<void> {
         this.activeIntercom?.kill();
-        this.activeIntercom = undefined;
+        this.activeIntercom = undefined as any;
 
         if (this.storage.getItem('twoWayAudio') === 'ONVIF') {
             return this.onvifIntercom.stopIntercom();
@@ -824,7 +826,7 @@ export class HikvisionCamera extends RtspSmartCamera implements Camera, Intercom
 }
 
 class HikvisionProvider extends RtspProvider {
-    clients: Map<string, HikvisionCameraAPI>;
+    clients!: Map<string, HikvisionCameraAPI>;
 
     constructor(nativeId?: ScryptedNativeId) {
         super(nativeId);
@@ -869,7 +871,7 @@ class HikvisionProvider extends RtspProvider {
         const username = settings.username?.toString();
         const password = settings.password?.toString();
 
-        const api = new HikvisionCameraAPI(httpAddress, username, password, this.console);
+        const api = new HikvisionCameraAPI(httpAddress, username || '', password || '', this.console);
 
         if (settings.autoconfigure) {
             const cameraNumber = (settings.rtspChannel as string)?.substring(0, 1) || '1';
@@ -877,7 +879,7 @@ class HikvisionProvider extends RtspProvider {
         }
 
         const skipValidate = settings.skipValidate?.toString() === 'true';
-        let twoWayAudio: string;
+        let twoWayAudio: string | undefined = undefined;
         if (!skipValidate) {
             try {
                 const deviceInfo = await api.getDeviceInfo();
@@ -909,12 +911,12 @@ class HikvisionProvider extends RtspProvider {
 
         const device = await this.getDevice(nativeId) as HikvisionCamera;
         device.info = info;
-        device.putSetting('username', username);
-        device.putSetting('password', password);
+        device.putSetting('username', username || '');
+        device.putSetting('password', password || '');
         if (settings.rtspChannel)
             device.putSetting('rtspChannel', settings.rtspChannel as string);
-        device.setHttpPortOverride(settings.httpPort?.toString());
-        device.setIPAddress(settings.ip?.toString());
+        device.setHttpPortOverride(settings.httpPort?.toString() || '');
+        device.setIPAddress(settings.ip?.toString() || '');
         if (twoWayAudio)
             device.putSetting('twoWayAudio', twoWayAudio);
         device.updateDeviceInfo();

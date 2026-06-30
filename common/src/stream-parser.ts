@@ -43,9 +43,9 @@ export function createDgramParser() {
 }
 
 export async function* parseMp4StreamChunks(parser: AsyncGenerator<MP4Atom>) {
-    let ftyp: MP4Atom;
-    let moov: MP4Atom;
-    let startStream: Buffer;
+    let ftyp: MP4Atom | undefined = undefined;
+    let moov: MP4Atom | undefined = undefined;
+    let startStream: Buffer | undefined = undefined;
     for await (const atom of parser) {
         if (!ftyp) {
             ftyp = atom;

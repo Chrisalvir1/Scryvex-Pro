@@ -4,6 +4,7 @@
         "target": "ES2021",
         "resolveJsonModule": true,
         "moduleResolution": "node",
+        "ignoreDeprecations": "6.0",
         "esModuleInterop": true,
         "sourceMap": true,
         "baseUrl": ".",

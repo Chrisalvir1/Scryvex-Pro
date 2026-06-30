@@ -62,7 +62,7 @@ export async function listenEvents(thisDevice: ScryptedDeviceBase, client: Onvif
                 timestamp: Date.now(),
                 detections: [
                     {
-                        score: undefined,
+                        score: 1,
                         className,
                     }
                 ]

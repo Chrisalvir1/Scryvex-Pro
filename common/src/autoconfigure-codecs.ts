@@ -64,13 +64,15 @@ export async function autoconfigureCodecs(
 
     for (const _ of ['local', 'remote', 'low-resolution'] as MediaStreamDestination[]) {
         // find stream with the highest configurable resolution.
-        let highest: [MediaStreamConfiguration, number] = [undefined, 0];
+        let highest: [MediaStreamConfiguration | undefined, number] = [undefined, 0];
         for (const codec of configurable) {
             if (used.includes(codec))
                 continue;
-            for (const resolution of codec.video.resolutions) {
-                if (resolution[0] * resolution[1] > highest[1]) {
-                    highest = [codec, resolution[0] * resolution[1]];
+            if (codec.video?.resolutions) {
+                for (const resolution of codec.video.resolutions) {
+                    if (resolution[0] * resolution[1] > highest[1]) {
+                        highest = [codec, resolution[0] * resolution[1]];
+                    }
                 }
             }
         }
@@ -84,15 +86,17 @@ export async function autoconfigureCodecs(
 
     const findResolutionTarget = (config: MediaStreamConfiguration, width: number, height: number) => {
         let diff = 999999999;
-        let ret: [number, number];
+        let ret: [number, number] = [0, 0];
 
         const targetArea = width * height;
-        for (const res of config.video.resolutions) {
-            const actualArea = res[0] * res[1];
-            const diffArea = Math.abs(targetArea - actualArea);            
-            if (diffArea < diff) {
-                diff = diffArea;
-                ret = res;
+        if (config.video?.resolutions) {
+            for (const res of config.video.resolutions) {
+                const actualArea = res[0] * res[1];
+                const diffArea = Math.abs(targetArea - actualArea);            
+                if (diffArea < diff) {
+                    diff = diffArea;
+                    ret = res;
+                }
             }
         }
 
@@ -104,7 +108,7 @@ export async function autoconfigureCodecs(
     const resolution = findResolutionTarget(l, 8192, 8192);
 
     // get the fps of 20 or highest available
-    let fps = Math.min(20, Math.max(...l.video.fpsRange));
+    let fps = Math.min(20, Math.max(...(l?.video?.fpsRange || [15])));
 
     let errors = '';
 
@@ -141,7 +145,7 @@ export async function autoconfigureCodecs(
         const rResolution = findResolutionTarget(r, 1280, 720);
         const lResolution = findResolutionTarget(l, 640, 360);
 
-        fps = Math.min(20, Math.max(...r.video.fpsRange));
+        fps = Math.min(20, Math.max(...(r?.video?.fpsRange || [15])));
         await logConfigureCodecs({
             id: r.id,
             video: {
@@ -158,7 +162,7 @@ export async function autoconfigureCodecs(
             audio: audioOptions,
         });
 
-        fps = Math.min(20, Math.max(...l.video.fpsRange));
+        fps = Math.min(20, Math.max(...(l?.video?.fpsRange || [15])));
         await logConfigureCodecs({
             id: l.id,
             video: {
@@ -183,7 +187,7 @@ export async function autoconfigureCodecs(
             target = [640, 360];
 
         const rResolution = findResolutionTarget(used[1], target[0], target[1]);
-        const fps = Math.min(20, Math.max(...used[1].video.fpsRange));
+        const fps = Math.min(20, Math.max(...(used[1]?.video?.fpsRange || [15])));
         await logConfigureCodecs({
             id: used[1].id,
             video: {

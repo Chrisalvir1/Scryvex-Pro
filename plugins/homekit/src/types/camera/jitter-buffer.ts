@@ -42,8 +42,8 @@ export function isNextSequenceNumber(current: number, next: number) {
 }
 
 export class JitterBuffer {
-    lastSequenceNumber: number;
-    pending: RtpPacket[] = [];
+    lastSequenceNumber!: number;
+    pending: (RtpPacket | undefined)[] = [];
 
     constructor(public console: Console, public jitterSize: number,) {
     }

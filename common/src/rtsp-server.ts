@@ -54,7 +54,7 @@ export async function readBody(client: Readable, response: Headers) {
 }
 
 
-export function writeMessage(client: Writable, messageLine: string, body: Buffer, headers: Headers, console?: Console) {
+export function writeMessage(client: Writable, messageLine: string, body: Buffer | undefined, headers: Headers, console?: Console) {
     let message = messageLine !== undefined ? `${messageLine}\r\n` : '';
     if (body)
         headers['Content-Length'] = body.length.toString();
@@ -314,6 +314,7 @@ export function createRtspParser(options?: StreamParserOptions): RtspStreamParse
             }
 
             // oh well!
+            return undefined as any;
         },
         sdp: new Promise<string>(r => resolve = r),
         async *parse(duplex, width, height) {
@@ -345,7 +346,7 @@ export function parseHeaders(headers: string[]): Headers {
     return ret;
 }
 
-export function getFirstAuthenticateHeader(headers: string[]): string {
+export function getFirstAuthenticateHeader(headers: string[]): string | undefined {
     for (const header of headers.slice(1)) {
         const index = header.indexOf(':');
         let value = '';
@@ -355,6 +356,7 @@ export function getFirstAuthenticateHeader(headers: string[]): string {
         if (key === 'www-authenticate')
             return value;
     }
+    return undefined;
 }
 
 export function parseSemicolonDelimited(value: string) {
@@ -387,7 +389,7 @@ export class RtspStatusError extends Error {
 }
 
 export class RtspBase {
-    client: net.Socket;
+    client!: net.Socket;
     console?: Console;
 
     constructor() {
@@ -426,14 +428,14 @@ export interface RtspClientUdpSetupOptions extends RtspClientSetupOptions {
 // probably only works with scrypted rtsp server.
 export class RtspClient extends RtspBase {
     cseq = 0;
-    session: string;
-    wwwAuthenticate: string;
-    requestTimeout: number;
+    session!: string;
+    wwwAuthenticate!: string;
+    requestTimeout!: number;
     needKeepAlive = false;
     setupOptions = new Map<number, RtspClientTcpSetupOptions>();
     issuedTeardown = false;
     hasGetParameter = true;
-    contentBase: string;
+    contentBase!: string;
 
     constructor(public readonly url: string) {
         super();
@@ -591,7 +593,7 @@ export class RtspClient extends RtspBase {
     async readLoop() {
         const deferred = new Deferred<void>();
 
-        let header: Buffer;
+        let header: Buffer | undefined;
         let channel: number;
         let length: number;
 
@@ -771,7 +773,7 @@ export class RtspClient extends RtspBase {
         }
         return {
             headers: response,
-            body: await this.readBody(response),
+            body: (await this.readBody(response)) || Buffer.alloc(0),
             status,
         }
     }
@@ -824,7 +826,7 @@ export class RtspClient extends RtspBase {
                 this.client.on('close', () => closeQuiet(udp.server));
             }
             port = options.dgram.address().port;
-            options.dgram.on('message', data => options.onRtp(undefined, data));
+            options.dgram.on('message', data => options.onRtp(Buffer.alloc(0), data));
         }
         headers = Object.assign({
             Transport: `RTP/AVP${protocol};unicast;${client}=${port}-${port + 1}`,
@@ -833,7 +835,7 @@ export class RtspClient extends RtspBase {
         let interleaved: {
             begin: number;
             end: number;
-        };
+        } | undefined = undefined;
         if (response.headers.session) {
             const sessionDict = parseSemicolonDelimited(response.headers.session);
             let timeout = parseInt(sessionDict['timeout']);
@@ -921,7 +923,7 @@ export interface RtspTrack {
 
 export class RtspServer {
     session: string;
-    console: Console;
+    console?: Console;
     setupTracks: {
         [trackId: string]: RtspTrack;
     } = {};
@@ -942,7 +944,7 @@ export class RtspServer {
             line = line.trim();
             if (!line) {
                 const method = await this.headers(currentHeaders);
-                if (methods.includes(method))
+                if (method && methods.includes(method))
                     return method;
                 currentHeaders = [];
                 continue;
@@ -1017,8 +1019,11 @@ export class RtspServer {
         if (track.protocol === 'udp') {
             if (!this.udp)
                 this.console?.warn('RTSP Server UDP socket not available.');
-            else
-                this.sendUdp(rtcp ? track.rtcp : track.rtp, track.destination, packet);
+            else {
+                const socket = rtcp ? track.rtcp : track.rtp;
+                if (socket)
+                    this.sendUdp(socket, track.destination, packet);
+            }
             return true;
         }
 
@@ -1042,15 +1047,17 @@ export class RtspServer {
         const headers: Headers = {};
         headers['Content-Base'] = url;
         headers['Content-Type'] = 'application/sdp';
-        this.respond(200, 'OK', requestHeaders, headers, Buffer.from(this.sdp))
+        this.respond(200, 'OK', requestHeaders, headers, Buffer.from(this.sdp || ''))
     }
 
     setupInterleaved(msection: MSection, low: number, high: number) {
-        this.setupTracks[msection.control] = {
-            control: msection.control,
-            protocol: 'tcp',
-            destination: low,
-            codec: msection.codec,
+        if (msection.control) {
+            this.setupTracks[msection.control] = {
+                control: msection.control || '',
+                protocol: 'tcp',
+                destination: low,
+                codec: msection.codec || '',
+            }
         }
     }
 
@@ -1063,8 +1070,8 @@ export class RtspServer {
         const headers: Headers = {};
         let transport = requestHeaders['transport'];
         headers['Session'] = this.session;
-        const parsedSdp = parseSdp(this.sdp);
-        const msection = parsedSdp.msections.find(msection => url.endsWith(msection.control));
+        const parsedSdp = parseSdp(this.sdp || '');
+        const msection = parsedSdp.msections.find(msection => url.endsWith(msection.control || ''));
         if (!msection) {
             this.respond(404, 'Not Found', requestHeaders, headers);
             return;
@@ -1091,18 +1098,24 @@ export class RtspServer {
                 return;
             }
             const match = transport.match(/.*?client_port=([0-9]+)-([0-9]+)/);
+            if (!match) {
+                this.respond(461, 'Unsupported Transport', requestHeaders, {});
+                return;
+            }
             const [_, rtp, rtcp] = match;
 
             const [rtpServer, rtcpServer] = await createSquentialBindZero();
             this.client.on('close', () => closeQuiet(rtpServer.server));
             this.client.on('close', () => closeQuiet(rtcpServer.server));
-            this.setupTracks[msection.control] = {
-                control: msection.control,
-                protocol: 'udp',
-                destination: parseInt(rtp),
-                codec: msection.codec,
-                rtp: rtpServer.server,
-                rtcp: rtcpServer.server,
+            if (msection.control) {
+                this.setupTracks[msection.control] = {
+                    control: msection.control || '',
+                    protocol: 'udp',
+                    destination: parseInt(rtp),
+                    codec: msection.codec || '',
+                    rtp: rtpServer.server,
+                    rtcp: rtcpServer.server,
+                }
             }
             transport = transport.replace('RTP/AVP/UDP', 'RTP/AVP').replace('RTP/AVP', 'RTP/AVP/UDP');
             transport += `;server_port=${rtpServer.port}-${rtcpServer.port}`;
@@ -1152,7 +1165,7 @@ export class RtspServer {
         method = method.toLowerCase();
         const requestHeaders = parseHeaders(headers);
         if (this.checkRequest) {
-            let allow: boolean;
+            let allow = false;
             try {
                 allow = await this.checkRequest(method, url, requestHeaders, headers)
             }
@@ -1197,8 +1210,10 @@ export class RtspServer {
     destroy() {
         this.client.destroy();
         for (const track of Object.values(this.setupTracks)) {
-            closeQuiet(track.rtp);
-            closeQuiet(track.rtcp);
+            if (track.rtp)
+                closeQuiet(track.rtp);
+            if (track.rtcp)
+                closeQuiet(track.rtcp);
         }
     }
 }
@@ -1209,7 +1224,7 @@ export async function listenSingleRtspClient<T extends RtspServer>(options?: {
     createServer?(duplex: Duplex): T,
 }) {
     const pathToken = options?.pathToken || crypto.randomBytes(8).toString('hex');
-    let { url, clientPromise, server } = await listenZeroSingleClient(options?.hostname);
+    let { url, clientPromise, server } = await listenZeroSingleClient(options?.hostname || '127.0.0.1');
 
     const rtspServerPath = '/' + pathToken;
     url = url.replace('tcp:', 'rtsp:') + rtspServerPath;

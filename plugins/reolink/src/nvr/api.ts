@@ -111,8 +111,8 @@ export interface PtzPreset {
 
 export class ReolinkNvrClient {
     credential: AuthFetchCredentialState;
-    parameters: Record<string, string>;
-    tokenLease: number;
+    parameters!: Record<string, string>;
+    tokenLease!: number;
     loggingIn = false;
     loggedIn = false;
     rebooting = false;
@@ -261,7 +261,7 @@ export class ReolinkNvrClient {
                 true
             );
 
-            this.parameters = parameters;
+            this.parameters = parameters as any;
             this.tokenLease = this.computeTokenLease(now, leaseTimeSeconds);
             this.loggedIn = true;
             this.connectionTime = now;
@@ -269,7 +269,7 @@ export class ReolinkNvrClient {
             this.setStoredLoginSession({
                 host: this.host,
                 username: this.credential.username,
-                parameters,
+                parameters: parameters as any,
                 createdAt: now,
                 leaseTimeSeconds: (!leaseTimeSeconds || leaseTimeSeconds === Infinity) ? 0 : leaseTimeSeconds,
             });
@@ -308,7 +308,7 @@ export class ReolinkNvrClient {
             params.set(k, v);
         }
         const res = await this.request(options, body);
-        const errors = res?.body?.filter(elem => elem.error).map(elem => elem.error);
+        const errors = res?.body?.filter((elem: any) => elem.error).map((elem: any) => elem.error);
 
         if (errors.length) {
             for (const error of errors) {
@@ -365,7 +365,7 @@ export class ReolinkNvrClient {
             method: 'POST',
         }, this.createReadable(body));
 
-        this.tokenLease = undefined;
+        this.tokenLease = undefined as any;
         this.parameters = {};
         this.setStoredLoginSession(undefined);
     }
@@ -392,7 +392,7 @@ export class ReolinkNvrClient {
             method: 'POST',
         }, this.createReadable(body));
 
-        const error = response?.body?.find(elem => elem.error)?.error;
+        const error = response?.body?.find((elem: any) => elem.error)?.error;
         if (error) {
             this.console.error('error during call to getOsd', error);
         }
@@ -422,14 +422,14 @@ export class ReolinkNvrClient {
             method: 'POST',
         }, this.createReadable(body));
 
-        const error = response?.body?.find(elem => elem.error)?.error;
+        const error = response?.body?.find((elem: any) => elem.error)?.error;
         if (error) {
             this.console.error('error during call to getOsd', error);
         }
     }
 
     printErrors(response: any, action: string, body: any[]) {
-        const errors = response?.body?.filter(elem => elem.error).map(elem => ({ ...elem.error, cmd: elem.cmd }));
+        const errors = response?.body?.filter((elem: any) => elem.error).map((elem: any) => ({ ...elem.error, cmd: elem.cmd }));
         if (errors.length) {
             this.console.error(`error during call to ${action}`, JSON.stringify({ errors, body }));
         }
@@ -458,15 +458,15 @@ export class ReolinkNvrClient {
 
         this.printErrors(response, 'getHubInfo', body);
 
-        const abilities = response.body.find(item => item.cmd === 'GetAbility')?.value;
-        const hubData = response.body.find(item => item.cmd === 'GetDevInfo')?.value;
+        const abilities = response!.body.find((item: any) => item.cmd === 'GetAbility')?.value;
+        const hubData = response!.body.find((item: any) => item.cmd === 'GetDevInfo')?.value;
         const devInfo: DevInfo = hubData?.DevInfo;
 
         return {
             abilities,
             hubData,
             devInfo,
-            response: response.body
+            response: response!.body
         };
     }
 
@@ -571,23 +571,23 @@ export class ReolinkNvrClient {
         }
 
         let op = '';
-        if (command.pan < 0)
+        if ((command.pan || 0) < 0)
             op += 'Left';
-        else if (command.pan > 0)
+        else if ((command.pan || 0) > 0)
             op += 'Right'
-        if (command.tilt < 0)
+        if ((command.tilt || 0) < 0)
             op += 'Down';
-        else if (command.tilt > 0)
+        else if ((command.tilt || 0) > 0)
             op += 'Up';
 
         if (op) {
             await this.ptzOp(channel, op, Math.ceil(Math.abs(command?.pan || command?.tilt || 1) * 10));
         }
 
-        op = undefined;
-        if (command.zoom < 0)
+        op = '';
+        if ((command.zoom || 0) < 0)
             op = 'ZoomDec';
-        else if (command.zoom > 0)
+        else if ((command.zoom || 0) > 0)
             op = 'ZoomInc';
 
         if (op) {
@@ -781,7 +781,7 @@ export class ReolinkNvrClient {
 
             if (hasPtz && presets !== undefined) {
                 const ptzPresetsEntry = response?.body?.[presets];
-                channelData[channel].ptzPresets = ptzPresetsEntry?.value?.PtzPreset?.filter(preset => preset.enable === 1);
+                channelData[channel].ptzPresets = ptzPresetsEntry?.value?.PtzPreset?.filter((preset: any) => preset.enable === 1);
                 channelData[channel].entries.push(ptzPresetsEntry);
             }
         });

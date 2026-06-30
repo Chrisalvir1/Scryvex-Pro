@@ -1,7 +1,15 @@
 #! /usr/bin/env node
 try {
-    require('../../../tools/typescript-compat/register-fallback.cjs');
-} catch (e) {}
+    const path = require('path');
+    const fs = require('fs');
+    let fallbackPath = path.resolve(__dirname, '../../../../tools/typescript-compat/register-fallback.cjs');
+    if (!fs.existsSync(fallbackPath)) {
+        fallbackPath = path.resolve(__dirname, '../../../tools/typescript-compat/register-fallback.cjs');
+    }
+    require(fallbackPath);
+} catch (e) {
+    console.error("Failed to load typescript compatibility fallback:", e);
+}
 try {
     require('adm-zip');
 }

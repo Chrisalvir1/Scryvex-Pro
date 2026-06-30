@@ -13,8 +13,8 @@ const { mediaManager } = sdk;
 const Require = 'www.onvif.org/ver20/backchannel';
 
 export class OnvifIntercom implements Intercom {
-    intercomClient: RtspClient;
-    url: string;
+    intercomClient?: RtspClient;
+    url!: string;
 
     constructor(public camera: RtspSmartCamera) {
     }
@@ -23,8 +23,8 @@ export class OnvifIntercom implements Intercom {
         const username = this.camera.storage.getItem("username");
         const password = this.camera.storage.getItem("password");
         const url = new URL(this.url);
-        url.username = username;
-        url.password = password;
+        url.username = username || '';
+        url.password = password || '';
         const intercomClient = this.intercomClient = new RtspClient(url.toString());
         intercomClient.console = this.camera.console;
         await intercomClient.options();
@@ -68,7 +68,7 @@ export class OnvifIntercom implements Intercom {
             const response = await intercomClient.request('SETUP', headers, audioBackchannel.control);
             transportDict = parseSemicolonDelimited(response.headers.transport);
             intercomClient.session = response.headers.session.split(';')[0];
-            ip = this.camera.getIPAddress();
+            ip = this.camera.getIPAddress() || '';
 
             const { server_port } = transportDict;
             const serverPorts = server_port.split('-');
@@ -174,8 +174,8 @@ export class OnvifIntercom implements Intercom {
                 ssrc,
                 packetSize: 1024,
                 encoderArguments: [
-                    '-acodec', defaultMatch.ffmpegEncoder,
-                    '-ar', defaultMatch.clock.toString(),
+                    '-acodec', defaultMatch.ffmpegEncoder || '',
+                    '-ar', defaultMatch.clock?.toString() || '8000',
                     "-b:a", "64k",
                     '-ac', defaultMatch.channels?.toString() || '1',
                 ],

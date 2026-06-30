@@ -26,7 +26,7 @@ export class RtspCamera extends CameraBase<UrlMediaStreamOptions> {
     getRawVideoStreamOptions(): UrlMediaStreamOptions[] {
         let urls: string[] = [];
         try {
-            urls = JSON.parse(this.storage.getItem('urls'));
+            urls = JSON.parse(this.storage.getItem('urls') || '[]');
         }
         catch (e) {
             const url = this.storage.getItem('url');
@@ -41,7 +41,7 @@ export class RtspCamera extends CameraBase<UrlMediaStreamOptions> {
         const ret = urls.filter(url => !!url).map((url, index) => createRtspMediaStreamOptions(url, index));
 
         if (!ret.length)
-            return;
+            return undefined as any;
         return ret;
     }
 
@@ -86,12 +86,12 @@ export class RtspCamera extends CameraBase<UrlMediaStreamOptions> {
 
     // hide the description from CameraBase that indicates it is only used for snapshots
     getUsernameDescription(): string {
-        return;
+        return '';
     }
 
     // hide the description from CameraBase that indicates it is only used for snapshots
     getPasswordDescription(): string {
-        return;
+        return '';
     }
 
     async getRtspUrlSettings(): Promise<Setting[]> {
@@ -152,7 +152,7 @@ export interface Destroyable {
 
 export abstract class RtspSmartCamera extends RtspCamera {
     lastListen = 0;
-    listener: Promise<Destroyable>;
+    listener?: Promise<Destroyable>;
 
     constructor(nativeId: string, provider: RtspProvider) {
         super(nativeId, provider);
@@ -194,7 +194,7 @@ export abstract class RtspSmartCamera extends RtspCamera {
             listener = await this.listener;
         }
         catch (e) {
-            this.console.error('listen loop connection failed, restarting listener.', e.message);
+            this.console.error('listen loop connection failed, restarting listener.', (e as any).message);
             restartListener();
             return;
         }
@@ -347,7 +347,7 @@ export abstract class RtspSmartCamera extends RtspCamera {
         return `${this.getIPAddress()}:${this.storage.getItem('rtspPort') || 554}`;
     }
 
-    constructedVideoStreamOptions: Promise<UrlMediaStreamOptions[]>;
+    constructedVideoStreamOptions?: Promise<UrlMediaStreamOptions[]>;
     async getVideoStreamOptions(): Promise<UrlMediaStreamOptions[]> {
         if (this.showRtspUrlOverride()) {
             const vsos = await super.getVideoStreamOptions();

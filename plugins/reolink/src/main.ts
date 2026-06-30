@@ -12,7 +12,7 @@ import { ReolinkNvrDevice } from './nvr/nvr';
 import { ReolinkNvrClient } from './nvr/api';
 
 class ReolinkCameraSiren extends ScryptedDeviceBase implements OnOff {
-    sirenTimeout: NodeJS.Timeout;
+    sirenTimeout!: NodeJS.Timeout;
 
     constructor(public camera: ReolinkCamera, nativeId: string) {
         super(nativeId);
@@ -101,16 +101,16 @@ class ReolinkCameraPirSensor extends ScryptedDeviceBase implements OnOff {
 }
 
 class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, Reboot, Intercom, ObjectDetector, PanTiltZoom, Sleep, VideoTextOverlays {
-    client: ReolinkCameraClient;
-    clientWithToken: ReolinkCameraClient;
-    onvifClient: OnvifCameraAPI;
+    client!: ReolinkCameraClient;
+    clientWithToken!: ReolinkCameraClient;
+    onvifClient!: OnvifCameraAPI;
     onvifIntercom = new OnvifIntercom(this);
-    motionTimeout: NodeJS.Timeout;
-    siren: ReolinkCameraSiren;
-    floodlight: ReolinkCameraFloodlight;
-    pirSensor: ReolinkCameraPirSensor;
-    batteryTimeout: NodeJS.Timeout;
-    isWifi: boolean;
+    motionTimeout!: NodeJS.Timeout;
+    siren!: ReolinkCameraSiren;
+    floodlight!: ReolinkCameraFloodlight;
+    pirSensor!: ReolinkCameraPirSensor;
+    batteryTimeout!: NodeJS.Timeout;
+    isWifi!: boolean;
 
     storageSettings = new StorageSettings(this, {
         doorbell: {
@@ -162,7 +162,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
                 };
                 for (const preset of presets) {
                     const [key, name] = preset.split('=');
-                    caps.presets[key] = name;
+                    (caps.presets as any)[key] = name;
                 }
                 this.ptzCapabilities = caps;
             },
@@ -218,7 +218,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
         };
 
         this.storageSettings.settings.presets.onGet = async () => {
-            const choices = this.storageSettings.values.cachedPresets.map((preset) => preset.id + '=' + preset.name);
+            const choices = (this.storageSettings.values.cachedPresets || []).map((preset: any) => preset.id + '=' + preset.name);
             return {
                 choices,
             };
@@ -384,7 +384,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
     }
 
     async getDetectionInput(detectionId: string, eventId?: any): Promise<MediaObject> {
-        return;
+        return undefined as any;
     }
 
     async ptzCommand(command: PanTiltZoomCommand): Promise<void> {
@@ -400,7 +400,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
             for (const key of Object.keys(ai)) {
                 if (key === 'channel')
                     continue;
-                const { alarm_state, support } = ai[key];
+                const { alarm_state, support } = (ai as any)[key];
                 if (support)
                     classes.push(key);
             }
@@ -517,7 +517,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
             this.startBatteryCheckInterval();
         }
 
-        await this.provider.updateDevice(this.nativeId, this.name ?? name, interfaces, type);
+        await (this.provider as any).updateDevice(this.nativeId, (this.name ?? name) || '', interfaces, type);
     }
 
     startBatteryCheckInterval() {
@@ -570,13 +570,13 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
 
     getClient() {
         if (!this.client)
-            this.client = new ReolinkCameraClient(this.getHttpAddress(), this.getUsername(), this.getPassword(), this.getRtspChannel(), this.console);
+            this.client = new ReolinkCameraClient(this.getHttpAddress() || '', this.getUsername() || '', this.getPassword() || '', this.getRtspChannel(), this.console);
         return this.client;
     }
 
     getClientWithToken() {
         if (!this.clientWithToken)
-            this.clientWithToken = new ReolinkCameraClient(this.getHttpAddress(), this.getUsername(), this.getPassword(), this.getRtspChannel(), this.console, true);
+            this.clientWithToken = new ReolinkCameraClient(this.getHttpAddress() || '', this.getUsername() || '', this.getPassword() || '', this.getRtspChannel(), this.console, true);
         return this.clientWithToken;
     }
 
@@ -587,7 +587,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
     }
 
     createOnvifClient() {
-        return connectCameraAPI(this.getHttpAddress(), this.getUsername(), this.getPassword(), this.console, this.storageSettings.values.doorbell ? this.storage.getItem('onvifDoorbellEvent') : undefined);
+        return connectCameraAPI(this.getHttpAddress() || '', this.getUsername() || '', this.getPassword() || '', this.console, this.storageSettings.values.doorbell ? this.storage.getItem('onvifDoorbellEvent') || '' : '');
     }
 
     async listenEvents() {
@@ -609,7 +609,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
                     for (const key of Object.keys(ai.value)) {
                         if (key === 'channel')
                             continue;
-                        const { support } = ai.value[key];
+                        const { support } = (ai.value as any)[key];
                         if (support)
                             classes.push(key);
                     }
@@ -630,15 +630,15 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
                         sourceId: this.pluginId
                     };
                     for (const c of classes) {
-                        const { alarm_state } = ai.value[c];
+                        const { alarm_state } = (ai.value as any)[c];
                         if (alarm_state) {
-                            od.detections.push({
+                            od.detections!.push({
                                 className: c,
                                 score: 1,
                             });
                         }
                     }
-                    if (od.detections.length) {
+                    if (od.detections!.length) {
                         triggerMotion();
                         sdk.deviceManager.onDeviceEvent(this.nativeId, ScryptedInterface.ObjectDetector, od);
                     }
@@ -658,7 +658,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
         if (useOnvifDetections) {
             const ret = await listenEvents(this, await this.createOnvifClient(), this.storageSettings.values.motionTimeout * 1000);
             ret.on('onvifEvent', (eventTopic: string, dataValue: any) => {
-                let className: string;
+                let className: string | undefined = undefined;
                 if (eventTopic.includes('PeopleDetect')) {
                     className = 'people';
                 }
@@ -765,7 +765,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
     }
 
     getRtspChannel() {
-        return parseInt(this.storage.getItem('rtspChannel')) || 0;
+        return parseInt(this.storage.getItem('rtspChannel') || '') || 0;
     }
 
     createRtspMediaStreamOptions(url: string, index: number) {
@@ -777,7 +777,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
     addRtspCredentials(rtspUrl: string) {
         const url = new URL(rtspUrl);
         if (url.protocol !== 'rtmp:') {
-            url.username = this.storage.getItem('username');
+            url.username = this.storage.getItem('username') || '';
             url.password = this.storage.getItem('password') || '';
             return url.toString();
         }
@@ -802,7 +802,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
     }
 
     async getConstructedVideoStreamOptions(): Promise<UrlMediaStreamOptions[]> {
-        let deviceInfo: DevInfo;
+        let deviceInfo: DevInfo | undefined = undefined;
         try {
             const client = this.getClient();
             deviceInfo = await client.getDeviceInfo();
@@ -810,7 +810,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
             this.console.error("Unable to gather device information.", e);
         }
 
-        let encoderConfig: Enc;
+        let encoderConfig: Enc | undefined = undefined;
         try {
             const client = this.getClient();
             encoderConfig = await client.getEncoderConfiguration();
@@ -875,7 +875,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
         // anecdotally, encoders of type h265 do not have a working RTMP main stream.
         const mainEncType = this.storageSettings.values.abilities?.value?.Ability?.abilityChn?.[rtspChannel]?.mainEncType?.ver;
 
-        if (isDeviceHomeHub(deviceInfo)) {
+        if (deviceInfo && isDeviceHomeHub(deviceInfo)) {
             streams.push(...[rtspMain, rtspSub]);
         } else if (live === 2) {
             if (mainEncType === 1) {
@@ -901,7 +901,7 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
                 "Reolink TrackMix WiFi",
                 "RLC-81MA",
                 "Trackmix Series W760"
-            ].includes(deviceInfo?.model)) {
+            ].includes(deviceInfo?.model as any)) {
             streams.push({
                 name: '',
                 id: 'autotrack.bcs',
@@ -948,14 +948,14 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
             if (mainStream?.width && mainStream?.height) {
                 for (const stream of streams) {
                     if (stream.id === 'main.bcs' || stream.id === `h264Preview_${channel}_main`) {
-                        stream.video.width = mainStream.width;
-                        stream.video.height = mainStream.height;
+                        stream.video!.width = mainStream.width;
+                        stream.video!.height = mainStream.height;
                     }
                     // 4k h265 rtmp is seemingly nonfunctional, but rtsp works. swap them so there is a functional stream.
                     if (mainStream.vType === 'h265' || mainStream.vType === 'hevc') {
                         if (stream.id === `h264Preview_${channel}_main`) {
                             this.console.warn('Detected h265. Change the camera configuration to use 2k mode to force h264. https://docs.scrypted.app/camera-preparation.html#h-264-video-codec');
-                            stream.video.codec = 'h265';
+                            stream.video!.codec = 'h265';
                             stream.id = `h265Preview_${channel}_main`;
                             stream.name = `RTSP ${stream.id}`;
                             stream.url = `rtsp://${this.getRtspAddress()}/${stream.id}`;
@@ -972,8 +972,8 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
     }
 
     async putSetting(key: string, value: string) {
-        this.client = undefined;
-        if (this.storageSettings.keys[key]) {
+        this.client = undefined as any;
+        if ((this.storageSettings.keys as any)[key]) {
             await this.storageSettings.putSetting(key, value);
         }
         else {
@@ -1134,11 +1134,11 @@ class ReolinkCamera extends RtspSmartCamera implements Camera, DeviceProvider, R
 
     async releaseDevice(id: string, nativeId: string) {
         if (nativeId.endsWith('-siren')) {
-            delete this.siren;
+            this.siren = undefined as any;
         } else if (nativeId.endsWith('-floodlight')) {
-            delete this.floodlight;
+            this.floodlight = undefined as any;
         } else if (nativeId.endsWith('-pir')) {
-            delete this.pirSensor;
+            this.pirSensor = undefined as any;
         }
     }
 }
@@ -1187,14 +1187,14 @@ class ReolinkProvider extends RtspProvider {
         }
 
         const skipValidate = settings.skipValidate?.toString() === 'true';
-        const username = settings.username?.toString();
-        const password = settings.password?.toString();
+        const username = settings.username?.toString() || '';
+        const password = settings.password?.toString() || '';
         let doorbell: boolean = false;
         let name: string = 'Reolink Camera';
-        let deviceInfo: DevInfo;
-        let ai;
-        let abilities;
-        const rtspChannel = parseInt(settings.rtspChannel?.toString()) || 0;
+        let deviceInfo: DevInfo | undefined = undefined;
+        let ai: AIState | undefined = undefined;
+        let abilities: any | undefined = undefined;
+        const rtspChannel = parseInt(settings.rtspChannel?.toString() || '') || 0;
         if (!skipValidate) {
             const api = new ReolinkCameraClient(httpAddress, username, password, rtspChannel, this.console);
             const apiWithToken = new ReolinkCameraClient(httpAddress, username, password, rtspChannel, this.console, true);
@@ -1210,7 +1210,7 @@ class ReolinkProvider extends RtspProvider {
                 deviceInfo = await api.getDeviceInfo();
                 doorbell = deviceInfo.type === 'BELL';
                 name = deviceInfo.name ?? 'Reolink Camera';
-                ai = await api.getAiState();
+                ai = await api.getAiState() as any;
                 try {
                     abilities = await api.getAbility();
                 } catch (e) {
@@ -1233,9 +1233,9 @@ class ReolinkProvider extends RtspProvider {
         device.storageSettings.values.deviceInfo = deviceInfo;
         device.storageSettings.values.abilities = abilities;
         device.storageSettings.values.hasObjectDetector = ai;
-        device.setIPAddress(settings.ip?.toString());
-        device.putSetting('rtspChannel', settings.rtspChannel?.toString());
-        device.setHttpPortOverride(settings.httpPort?.toString());
+        device.setIPAddress(settings.ip?.toString() || '');
+        device.putSetting('rtspChannel', settings.rtspChannel?.toString() || '');
+        device.setHttpPortOverride(settings.httpPort?.toString() || '');
         device.updateDeviceInfo();
 
         return nativeId;
@@ -1293,8 +1293,8 @@ class ReolinkProvider extends RtspProvider {
     }
 
     async createNvrDeviceFromSettings(settings: DeviceCreatorSettings) {
-        const username = settings.username?.toString();
-        const password = settings.password?.toString();
+        const username = settings.username?.toString() || '';
+        const password = settings.password?.toString() || '';
         const ip = settings.ip?.toString();
         const httpPort = settings.httpPort;
         const rtspPort = settings.rtspPort;

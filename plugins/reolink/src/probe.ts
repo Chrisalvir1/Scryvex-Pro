@@ -52,7 +52,7 @@ async function getDeviceInfoInternal(host: string, parameters: Record<string, st
 
 export async function getDeviceInfo(host: string, username: string, password: string): Promise<DevInfo> {
     const parameters = await getLoginParameters(host, username, password);
-    return getDeviceInfoInternal(host, parameters.parameters);
+    return getDeviceInfoInternal(host, parameters.parameters as any);
 }
 
 export async function getLoginParameters(host: string, username: string, password: string, forceToken?: boolean) {

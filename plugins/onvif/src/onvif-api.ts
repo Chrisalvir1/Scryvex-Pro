@@ -51,12 +51,12 @@ async function promisify<T>(block: (callback: (err: Error, value: T) => void) =>
 }
 
 export class OnvifCameraAPI {
-    snapshotUrls = new Map<string, string>();
+    snapshotUrls = new Map<string, string | undefined>();
     rtspUrls = new Map<string, string>();
-    profiles: Promise<any>;
+    profiles!: Promise<any>;
     binaryStateEvent: string;
     credential: AuthFetchCredentialState;
-    detections: Map<string, string>;
+    detections!: Map<string, string>;
 
     constructor(public cam: any, username: string, password: string, public console: Console, binaryStateEvent: string) {
         this.binaryStateEvent = binaryStateEvent
@@ -181,12 +181,12 @@ export class OnvifCameraAPI {
         if (options.H265)
             codecs.push('h265');
 
-        let qualityRange: [number, number];
+        let qualityRange: [number, number] | undefined = undefined;
         const resolutions: [number, number][] = [];
-        let fpsRange: [number, number];
-        let keyframeIntervalRange: [number, number];
+        let fpsRange: [number, number] | undefined = undefined;
+        let keyframeIntervalRange: [number, number] | undefined = undefined;
         const profiles: string[] = [];
-        let bitrateRange: [number, number];
+        let bitrateRange: [number, number] | undefined = undefined;
 
         const ensureArray = (value: any): any => {
             if (!Array.isArray(value))
@@ -197,9 +197,9 @@ export class OnvifCameraAPI {
         const H264 = options?.extension?.H264 || options?.H264;
         if (H264) {
             if (H264?.H264ProfilesSupported)
-                profiles.push(...ensureArray(H264.H264ProfilesSupported).map(p => p.toLowerCase()));
+                profiles.push(...ensureArray(H264.H264ProfilesSupported).map((p: any) => p.toLowerCase()));
             if (H264?.resolutionsAvailable)
-                resolutions.push(...ensureArray(H264.resolutionsAvailable).map(r => [r.width, r.height]));
+                resolutions.push(...ensureArray(H264.resolutionsAvailable).map((r: any) => [r.width, r.height]));
             if (H264?.frameRateRange?.min || H264?.frameRateRange?.max)
                 fpsRange = [H264.frameRateRange.min, H264.frameRateRange.max];
             if (H264?.govLengthRange?.min || H264?.govLengthRange?.max)
@@ -234,7 +234,7 @@ export class OnvifCameraAPI {
     async getProfiles() {
         if (!this.profiles) {
             this.profiles = promisify(cb => this.cam.getProfiles(cb));
-            this.profiles.catch(() => this.profiles = undefined);
+            this.profiles.catch(() => { this.profiles = undefined as any; });
         }
         return this.profiles;
     }
@@ -294,7 +294,7 @@ export class OnvifCameraAPI {
             return [...this.detections.values()];
 
         return new Promise((resolve, reject) => {
-            this.cam.getEventProperties((err, data, xml) => {
+            this.cam.getEventProperties((err: any, data: any, xml: any) => {
                 if (err) {
                     this.console.log('getEventTypes error', err);
                     return reject(err);
@@ -325,12 +325,12 @@ export class OnvifCameraAPI {
     async getStreamUrl(profileToken?: string): Promise<string> {
         if (!profileToken)
             profileToken = await this.getMainProfileToken();
-        if (!this.rtspUrls.has(profileToken)) {
+        if (!this.rtspUrls.has(profileToken || '')) {
             const result = await promisify(cb => this.cam.getStreamUri({ protocol: 'RTSP', profileToken }, cb)) as any;
             const url = result.uri;
-            this.rtspUrls.set(profileToken, url);
+            this.rtspUrls.set(profileToken || '', url);
         }
-        return this.rtspUrls.get(profileToken);
+        return this.rtspUrls.get(profileToken || '') || '';
     }
 
     async jpegSnapshot(profileToken?: string, timeout = 10000): Promise<Buffer | undefined> {
@@ -343,7 +343,7 @@ export class OnvifCameraAPI {
                 this.snapshotUrls.set(profileToken, url);
             }
             catch (e) {
-                if (e.message && e.message.indexOf('ActionNotSupported') !== -1) {
+                if ((e as any).message && (e as any).message.indexOf('ActionNotSupported') !== -1) {
                     this.snapshotUrls.set(profileToken, undefined);
                 }
                 else {

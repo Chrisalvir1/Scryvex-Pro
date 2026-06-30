@@ -62,8 +62,8 @@ function toHikvisionAudioCodec(codec: string) {
 
 export class HikvisionCameraAPI implements HikvisionAPI {
     credential: AuthFetchCredentialState;
-    deviceModel: Promise<string>;
-    listenerPromise: Promise<Destroyable>;
+    deviceModel!: Promise<string>;
+    listenerPromise!: Promise<Destroyable>;
 
     constructor(public ip: string, username: string, password: string, public console: Console) {
         this.credential = {
@@ -109,10 +109,10 @@ export class HikvisionCameraAPI implements HikvisionAPI {
 
     async checkDeviceModel(): Promise<string> {
         if (!this.deviceModel) {
-            this.deviceModel = this.getDeviceInfo().then(d => d.deviceModel).catch(e => {
+            this.deviceModel = (this.getDeviceInfo().then(d => d.deviceModel).catch(e => {
                 this.console.error('error checking NVR model', e);
                 return undefined;
-            });
+            })) as Promise<string>;
         }
         return await this.deviceModel;
     }
@@ -125,7 +125,7 @@ export class HikvisionCameraAPI implements HikvisionAPI {
         ];
         const model = await this.checkDeviceModel();
         if (!model)
-            return;
+            return false;
         return !!oldModels.find(oldModel => model?.match(oldModel));
     }
 
@@ -196,20 +196,20 @@ export class HikvisionCameraAPI implements HikvisionAPI {
                     events.removeAllListeners();
                 };
                 stream.on('close', () => {
-                    this.listenerPromise = undefined;
+                    this.listenerPromise = undefined as any;
                     events.emit('close');
                 });
                 stream.on('end', () => {
-                    this.listenerPromise = undefined;
+                    this.listenerPromise = undefined as any;
                     events.emit('end');
                 });
                 stream.on('error', e => {
-                    this.listenerPromise = undefined;
+                    this.listenerPromise = undefined as any;
                     events.emit('error', e);
                 });
                 stream.socket.setKeepAlive(true);
 
-                const ct = stream.headers['content-type'];
+                const ct = (Array.isArray(stream.headers['content-type']) ? stream.headers['content-type'][0] : stream.headers['content-type']) || '';
                 // make content type parsable as content disposition filename
                 const cd = contentType.parse(ct);
                 let { boundary } = cd.parameters;
@@ -244,7 +244,7 @@ export class HikvisionCameraAPI implements HikvisionAPI {
                                     continue;
                                 }
                                 events.emit('smart', lastSmartDetection, body);
-                                lastSmartDetection = undefined;
+                                lastSmartDetection = undefined as any;
                                 continue;
                             }
 
@@ -257,7 +257,7 @@ export class HikvisionCameraAPI implements HikvisionAPI {
                             }
                         }
 
-                        const data = body.toString();
+                        const data = body!.toString();
                         events.emit('data', data);
                         for (const event of Object.values(HikvisionCameraEvent)) {
                             if (data.indexOf(event) !== -1) {
@@ -277,7 +277,7 @@ export class HikvisionCameraAPI implements HikvisionAPI {
                     .catch(() => stream.destroy());
                 return events as any as Destroyable;
             });
-            this.listenerPromise.catch(() => this.listenerPromise = undefined);
+            this.listenerPromise.catch(() => { this.listenerPromise = undefined as any; });
         }
 
         return this.listenerPromise;
@@ -299,7 +299,7 @@ export class HikvisionCameraAPI implements HikvisionAPI {
         const { video: videoOptions, audio: audioOptions } = options;
 
         if (videoOptions?.codec) {
-            let videoCodecType: string;
+            let videoCodecType: string | undefined = undefined;
             switch (videoOptions.codec) {
                 case 'h264':
                     videoCodecType = 'H.264';
@@ -323,7 +323,7 @@ export class HikvisionCameraAPI implements HikvisionAPI {
             vc.GovLength = [videoOptions.keyframeInterval.toString()];
 
         if (videoOptions?.profile) {
-            let profile: string;
+            let profile: string | undefined = undefined;
             switch (videoOptions.profile) {
                 case 'baseline':
                     profile = 'Baseline';
@@ -377,7 +377,7 @@ export class HikvisionCameraAPI implements HikvisionAPI {
         }
 
         if (audioOptions?.codec && ac) {
-            ac.audioCompressionType = [toHikvisionAudioCodec(options.audio.codec)];
+            ac.audioCompressionType = [toHikvisionAudioCodec(options.audio!.codec || '')!];
             ac.enabled = ['true'];
         }
 
@@ -407,24 +407,24 @@ export class HikvisionCameraAPI implements HikvisionAPI {
             id: options.id,
             video: {},
         }
-        vso.video.bitrateRange = [parseInt(v.vbrUpperCap[0].$.min) * 1000, parseInt(v.vbrUpperCap[0].$.max) * 1000];
+        vso.video!.bitrateRange = [parseInt(v.vbrUpperCap[0].$.min) * 1000, parseInt(v.vbrUpperCap[0].$.max) * 1000];
         // fps is scaled by 100.
         const fpsRange = v.maxFrameRate[0].$.opt.split(',').map(fps => parseInt(fps) / 100);
-        vso.video.fpsRange = [Math.min(...fpsRange), Math.max(...fpsRange)];
+        vso.video!.fpsRange = [Math.min(...fpsRange), Math.max(...fpsRange)];
 
-        vso.video.bitrateControls = ['constant', 'variable'];
-        vso.video.keyframeIntervalRange = [parseInt(v.GovLength[0].$.min), parseInt(v.GovLength[0].$.max)];
+        vso.video!.bitrateControls = ['constant', 'variable'];
+        vso.video!.keyframeIntervalRange = [parseInt(v.GovLength[0].$.min), parseInt(v.GovLength[0].$.max)];
         const videoResolutionWidths = v.videoResolutionWidth[0].$.opt.split(',').map(w => parseInt(w));
         const videoResolutionHeights = v.videoResolutionHeight[0].$.opt.split(',').map(h => parseInt(h));
-        vso.video.resolutions = videoResolutionWidths.map((w, i) => ([w, videoResolutionHeights[i]]));
+        vso.video!.resolutions = videoResolutionWidths.map((w, i) => ([w, videoResolutionHeights[i]]));
 
         return vso;
     }
 
     async getCodecs(camNumber: string) {
         const defaultMap = new Map<string, MediaStreamOptions>();
-        defaultMap.set(camNumber + '01', undefined);
-        defaultMap.set(camNumber + '02', undefined);
+        defaultMap.set(camNumber + '01', undefined as any);
+        defaultMap.set(camNumber + '02', undefined as any);
 
         try {
             const response = await this.request({
@@ -697,8 +697,8 @@ export class HikvisionCameraAPI implements HikvisionAPI {
     }
 
     async ptzCommand(command: PanTiltZoomCommand) {
-        let startCommandData: string;
-        let endCommandData: string;
+        let startCommandData: string = '';
+        let endCommandData: string = '';
 
         const movement = 40;
         if (command.preset) {

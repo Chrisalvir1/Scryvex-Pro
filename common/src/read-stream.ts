@@ -15,7 +15,7 @@ export async function read16BELengthLoop(readable: Readable, options: {
 
   readable.on('error', e => error = e);
 
-  let header: Buffer;
+  let header: Buffer | undefined;
   let length: number;
   let skipCount = 0;
   let readCount = 0;

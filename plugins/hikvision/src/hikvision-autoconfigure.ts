@@ -24,7 +24,7 @@ export async function autoconfigureSettings(client: HikvisionAPI, camNumber: str
     return ac(
         () => client.getCodecs(camNumber),
         (options) => {
-            const channelNumber = options.id.substring(1);
+            const channelNumber = (options.id || '').substring(1);
             return client.configureCodecs(camNumber, channelNumber, options)
         }
     );

@@ -122,7 +122,7 @@ function fromAmcrestVideoCodec(videoCodec: string) {
     return videoCodec;
 }
 
-const amcrestResolutions = {
+const amcrestResolutions: Record<string, number[]> = {
     "1080P": [1920, 1080],
     "720P": [1280, 720],
     "D1": [704, 480],
@@ -136,7 +136,7 @@ const amcrestResolutions = {
     "QVGA": [320, 240]
 };
 
-const palAmcrestResolutions = {
+const palAmcrestResolutions: Record<string, number[]> = {
     "D1": [704, 576],
     "HD1": [352, 576],
     "BCIF": [528, 288],
@@ -252,7 +252,7 @@ export class AmcrestCameraClient {
 
         const ct = stream.headers['content-type'];
         // make content type parsable as content disposition filename
-        const cd = contentType.parse(ct);
+        const cd = contentType.parse(ct || 'multipart/x-mixed-replace; boundary=myboundary');
         let { boundary } = cd.parameters;
         // amcrest may send "--myboundary" or "-- myboundary" (with a space)
         const altBoundary = `-- ${boundary}`;
@@ -271,17 +271,17 @@ export class AmcrestCameraClient {
                 // dahua bugs out and sends this (handle both HTTP/1.0 and HTTP/1.1).
                 if (ignore === 'HTTP/1.1 200 OK' || ignore === 'HTTP/1.0 200 OK') {
                     const message = await readAmcrestMessage(stream);
-                    this.console.log('ignoring dahua http message', message);
+                    this.console?.log('ignoring dahua http message', message);
                     message.unshift('');
                     const headers = parseHeaders(message);
                     const body = await readBody(stream, headers);
                     if (body)
-                        this.console.log('ignoring dahua http body', body);
+                        this.console?.log('ignoring dahua http body', body);
                     continue;
                 }
                 if (ignore !== boundary && ignore !== altBoundary) {
-                    this.console.error('expected boundary but found', ignore);
-                    this.console.error(response.headers);
+                    this.console?.error('expected boundary but found', ignore);
+                    this.console?.error(response.headers);
                     throw new Error('expected boundary');
                 }
 
@@ -291,20 +291,22 @@ export class AmcrestCameraClient {
                 const headers = parseHeaders(message);
                 const body = await readBody(stream, headers);
 
-                const data = body.toString();
+                const data = body?.toString() || '';
+                if (!data)
+                    continue;
                 events.emit('data', data);
 
                 const parts = data.split(';');
-                let index: string;
+                let index: string = '';
                 try {
                     for (const part of parts) {
                         if (part.startsWith('index')) {
-                            index = part.split('=')[1]?.trim();
+                            index = part.split('=')[1]?.trim() || '';
                         }
                     }
                 }
                 catch (e) {
-                    this.console.error('error parsing index', data);
+                    this.console?.error('error parsing index', data);
                 }
                 let jsonData: any;
                 try {
@@ -315,7 +317,7 @@ export class AmcrestCameraClient {
                     }
                 }
                 catch (e) {
-                    this.console.error('error parsing data', data);
+                    this.console?.error('error parsing data', data);
                 }
 
                 for (const event of Object.values(AmcrestEvent)) {
@@ -356,7 +358,7 @@ export class AmcrestCameraClient {
                 method: 'POST',
                 responseType: 'text',
             },);
-            this.console.log(response.body);
+            this.console?.log(response.body);
         }
     }
 
@@ -441,7 +443,7 @@ export class AmcrestCameraClient {
             url: `http://${this.ip}/cgi-bin/configManager.cgi?action=setConfig&${params}`,
             responseType: 'text',
         });
-        this.console.log('reset motion result', response.body);
+        this.console?.log('reset motion result', response.body);
     }
 
     async configureCodecs(cameraNumber: number, options: MediaStreamConfiguration) {
@@ -453,13 +455,13 @@ export class AmcrestCameraClient {
             responseType: 'text',
         });
 
-        this.console.log(capsResponse.body);
+        this.console?.log(capsResponse.body);
 
         const videoStandardResponse = await this.request({
             url: `http://${this.ip}/cgi-bin/configManager.cgi?action=getConfig&name=VideoStandard`,
             responseType: 'text',
         });
-        this.console.log(videoStandardResponse.body);
+        this.console?.log(videoStandardResponse.body);
 
         const formatNumber = Math.max(0, parseInt(options.id?.substring('channel'.length)) - 1);
         const format = options.id === 'channel0' ? 'MainFormat' : 'ExtraFormat';
@@ -500,7 +502,7 @@ export class AmcrestCameraClient {
         }
 
         if (options.audio?.codec) {
-            params.set(`${encode}.Audio.Compression`, toAmcrestAudioCodec(options.audio.codec));
+            params.set(`${encode}.Audio.Compression`, toAmcrestAudioCodec(options.audio!.codec!) || '');
             params.set(`${encode}.AudioEnable`, 'true');
         }
 
@@ -511,7 +513,7 @@ export class AmcrestCameraClient {
                 url: `http://${this.ip}/cgi-bin/configManager.cgi?action=setConfig&${params}`,
                 responseType: 'text',
             });
-            this.console.log('reconfigure result', response.body);
+            this.console?.log('reconfigure result', response.body);
         }
 
         const caps = `caps[${cameraNumber - 1}].${format}[${formatNumber}]`;
@@ -528,16 +530,18 @@ export class AmcrestCameraClient {
                 return findValue(capsLines, singleCaps, key);
         }
 
-        const resolutions = findCaps('Video.ResolutionTypes').split(',').map(r => fromAmcrestResolution(r, videoStandard));
-        const bitrates = findCaps('Video.BitRateOptions').split(',').map(s => parseInt(s) * 1000);
-        const fpsMax = parseInt(findCaps('Video.FPSMax'));
+        const resolutions = (findCaps('Video.ResolutionTypes') || '').split(',').map(r => fromAmcrestResolution(r, videoStandard || ''));
+        const bitrates = (findCaps('Video.BitRateOptions') || '').split(',').map(s => parseInt(s) * 1000);
+        const fpsMax = parseInt(findCaps('Video.FPSMax') || '0');
         const vso: MediaStreamConfiguration = {
             id: options.id,
             video: {},
         };
-        vso.video.resolutions = resolutions;
-        vso.video.bitrateRange = [bitrates[0], bitrates[bitrates.length - 1]];
-        vso.video.fpsRange = [1, fpsMax];
+        if (vso.video) {
+            vso.video.resolutions = resolutions as [number, number][];
+            vso.video.bitrateRange = [bitrates[0], bitrates[bitrates.length - 1]];
+            vso.video.fpsRange = [1, fpsMax];
+        }
         return vso;
     }
 
@@ -551,16 +555,16 @@ export class AmcrestCameraClient {
         // amcrest reports more streams than are acually available in its responses,
         // so checking the max extra streams prevents usage of invalid streams.
         const maxExtraStreams = parseInt(mas) || 1;
-        const vsos = [...Array(maxExtraStreams + 1).keys()].map(subtype => createRtspMediaStreamOptions(undefined, subtype));
+        const vsos = [...Array(maxExtraStreams + 1).keys()].map(subtype => createRtspMediaStreamOptions('' + subtype, subtype));
 
         const encodeResponse = await this.request({
             url: `http://${this.ip}/cgi-bin/configManager.cgi?action=getConfig&name=Encode`,
             responseType: 'text',
         });
-        if (!encodeResponse.body) {
+        if (!encodeResponse || !encodeResponse.body) {
             throw new Error("Amcrest Encode config response body is empty or undefined");
         }
-        this.console.log(encodeResponse.body);
+        this.console?.log(encodeResponse.body);
         const encodeLines = getLines(encodeResponse.body);
 
         for (let i = 0; i < vsos.length; i++) {
@@ -577,8 +581,11 @@ export class AmcrestCameraClient {
             const videoComp = findValue(encodeLines, encName, 'Video.Compression');
             const audioComp = findValue(encodeLines, encName, 'Audio.Compression');
 
+            const video = vso.video || {};
+            vso.video = video;
+
             if (videoComp) {
-                vso.video.codec = fromAmcrestVideoCodec(videoComp);
+                video.codec = fromAmcrestVideoCodec(videoComp);
             }
             if (vso.audio && audioComp) {
                 vso.audio.codec = fromAmcrestAudioCodec(audioComp);
@@ -587,13 +594,13 @@ export class AmcrestCameraClient {
             const width = findValue(encodeLines, encName, 'Video.Width');
             const height = findValue(encodeLines, encName, 'Video.Height');
             if (width && height) {
-                vso.video.width = parseInt(width);
-                vso.video.height = parseInt(height);
+                video.width = parseInt(width);
+                video.height = parseInt(height);
             }
 
             const videoEnable = findValue(encodeLines, encName, 'VideoEnable');
             if (videoEnable?.trim() === 'false') {
-                this.console.warn('Video stream is disabled and should likely be enabled:', encName);
+                this.console?.warn('Video stream is disabled and should likely be enabled:', encName);
                 continue;
             }
 
@@ -601,7 +608,7 @@ export class AmcrestCameraClient {
             if (!encodeOptions)
                 continue;
 
-            vso.video.bitrate = parseInt(encodeOptions) * 1000;
+            video.bitrate = parseInt(encodeOptions) * 1000;
         }
 
         return vsos;

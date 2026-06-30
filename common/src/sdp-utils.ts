@@ -90,7 +90,7 @@ export function findTrackByType(sdp: string, type: string, directions: TrackDire
             const control = lines.find(line => line.startsWith(controlString));
             return {
                 section: 'm=' + section,
-                trackId: control.substring(controlString.length),
+                trackId: control ? control.substring(controlString.length) : '',
             };
         }
 
@@ -175,13 +175,13 @@ export type RTPMap = ReturnType<typeof parseRtpMap>;
 export function parseRtpMap(mline: ReturnType<typeof parseMLine>, rtpmap: string) {
     const mlineType = mline.type;
     const match = rtpmap?.match(/a=rtpmap:([\d]+) (.*?)\/([\d]+)(\/([\d]+))?/);
-    let channels = parseInt(match?.[5]) || undefined;
-    let payloadType = parseInt(match?.[1]);
+    let channels = match ? (parseInt(match[5]) || undefined) : undefined;
+    let payloadType = match ? parseInt(match[1]) : 0;
 
     rtpmap = rtpmap?.toLowerCase();
 
-    let codec: string;
-    let ffmpegEncoder: string;
+    let codec: string | undefined = undefined;
+    let ffmpegEncoder: string | undefined = undefined;
     if (rtpmap?.includes('mpeg4')) {
         codec = 'aac';
         ffmpegEncoder = 'aac';
@@ -253,7 +253,7 @@ export function parseRtpMap(mline: ReturnType<typeof parseMLine>, rtpmap: string
     }
 
     // assigned payload types do not need to provide a clock, there is a default.
-    let clock = parseInt(match?.[3]);
+    let clock: number | undefined = match ? parseInt(match[3]) : undefined;
     if (!clock) {
         clock = undefined;
         if (codec === 'pcm_mulaw' || codec === 'pcm_alaw')
@@ -283,7 +283,7 @@ export function parseMSection(msection: string[]) {
     // if no rtp map is specified, pcm_alaw is used. parsing a null rtpmap is valid.
     const rtpmap = parseRtpMap(mline, rawRtpmaps[0]);
     const { codec } = rtpmap;
-    let direction: string;
+    let direction: string | undefined = undefined;
 
     for (const checkDirection of ['sendonly', 'sendrecv', 'recvonly', 'inactive']) {
         const found = msection.find(line => line === 'a=' + checkDirection);
@@ -317,7 +317,7 @@ export function parseSdp(sdp: string) {
     const lines = sdp.split('\n').map(line => line.trim());
     const header: string[] = [];
     const msections: string[][] = [];
-    let msection: string[];
+    let msection: string[] | undefined = undefined;
 
     for (const line of lines) {
         if (line.startsWith('m=')) {
