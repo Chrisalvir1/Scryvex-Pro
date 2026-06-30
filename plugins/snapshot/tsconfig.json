@@ -1,14 +1,18 @@
 {
     "compilerOptions": {
-        "module": "NodeNext",
-        "target": "ESNext",
+        "module": "commonjs",
+        "target": "ES2021",
         "resolveJsonModule": true,
-        "moduleResolution": "NodeNext",
+        "moduleResolution": "node",
         "esModuleInterop": true,
-        "sourceMap": true
+        "sourceMap": true,
+        "baseUrl": ".",
+        "paths": {
+            "@scrypted/sdk": ["./node_modules/@scrypted/sdk"],
+            "@scrypted/common/*": ["./node_modules/@scrypted/common/*"]
+        }
     },
     "include": [
-        "src/**/*",
-        "test/**/*",
+        "src/**/*"
     ]
 }
