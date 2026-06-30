@@ -21,11 +21,11 @@ export interface ParserSession<T extends string> {
     killed: Promise<void>;
     isActive: boolean;
 
-    emit(container: T, chunk: StreamChunk): this;
-    on(container: T, callback: (chunk: StreamChunk) => void): this;
-    on(error: 'error', callback: (e: Error) => void): this;
-    removeListener(event: T | 'killed', callback: any): this;
-    once(event: T | 'killed', listener: (...args: any[]) => void): this;
+    emit(container: T, chunk: StreamChunk): ParserSession<T>;
+    on(container: T, callback: (chunk: StreamChunk) => void): ParserSession<T>;
+    on(error: 'error', callback: (e: Error) => void): ParserSession<T>;
+    removeListener(event: T | 'killed', callback: any): ParserSession<T>;
+    once(event: T | 'killed', listener: (...args: any[]) => void): ParserSession<T>;
 }
 
 export interface ParserOptions<T extends string> {

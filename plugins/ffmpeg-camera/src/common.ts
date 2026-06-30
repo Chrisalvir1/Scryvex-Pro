@@ -17,7 +17,7 @@ export abstract class CameraBase<T extends ResponseMediaStreamOptions> extends S
     }
 
     async getPictureOptions(): Promise<PictureOptions[]> {
-        return;
+        return [];
     }
 
     async getVideoStreamOptions(): Promise<T[]> {
@@ -89,7 +89,7 @@ export abstract class CameraBase<T extends ResponseMediaStreamOptions> extends S
         ];
 
         for (const s of ret) {
-            s.group = this.provider.name.replace('Plugin', '').trim();
+            s.group = this.provider?.name?.replace('Plugin', '').trim() || '';
             s.subgroup ||= 'General';
         }
 
@@ -103,7 +103,7 @@ export abstract class CameraBase<T extends ResponseMediaStreamOptions> extends S
             this.storage.setItem('defaultStream', stream?.id || '');
         }
         else {
-            this.storage.setItem(key, value.toString());
+            this.storage.setItem(key, value?.toString() || '');
         }
 
         this.onDeviceEvent(ScryptedInterface.Settings, undefined);

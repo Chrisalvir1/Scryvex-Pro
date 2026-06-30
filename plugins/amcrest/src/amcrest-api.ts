@@ -557,11 +557,15 @@ export class AmcrestCameraClient {
             url: `http://${this.ip}/cgi-bin/configManager.cgi?action=getConfig&name=Encode`,
             responseType: 'text',
         });
+        if (!encodeResponse.body) {
+            throw new Error("Amcrest Encode config response body is empty or undefined");
+        }
         this.console.log(encodeResponse.body);
         const encodeLines = getLines(encodeResponse.body);
 
         for (let i = 0; i < vsos.length; i++) {
             const vso = vsos[i];
+            if (!vso) continue;
             let encName: string;
             if (i === 0) {
                 encName = `table.Encode[${cameraNumber - 1}].MainFormat[0]`;
@@ -570,12 +574,15 @@ export class AmcrestCameraClient {
                 encName = `table.Encode[${cameraNumber - 1}].ExtraFormat[${i - 1}]`;
             }
 
-            const videoCodec = fromAmcrestVideoCodec(findValue(encodeLines, encName, 'Video.Compression'));
-            const audioCodec = fromAmcrestAudioCodec(findValue(encodeLines, encName, 'Audio.Compression'));
+            const videoComp = findValue(encodeLines, encName, 'Video.Compression');
+            const audioComp = findValue(encodeLines, encName, 'Audio.Compression');
 
-            if (vso.audio)
-                vso.audio.codec = audioCodec;
-            vso.video.codec = videoCodec;
+            if (videoComp) {
+                vso.video.codec = fromAmcrestVideoCodec(videoComp);
+            }
+            if (vso.audio && audioComp) {
+                vso.audio.codec = fromAmcrestAudioCodec(audioComp);
+            }
 
             const width = findValue(encodeLines, encName, 'Video.Width');
             const height = findValue(encodeLines, encName, 'Video.Height');

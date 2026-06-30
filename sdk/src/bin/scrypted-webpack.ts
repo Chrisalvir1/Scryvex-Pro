@@ -1,5 +1,8 @@
 #! /usr/bin/env node
 try {
+    require('../../../tools/typescript-compat/register-fallback.cjs');
+} catch (e) {}
+try {
     require('adm-zip');
 }
 catch {

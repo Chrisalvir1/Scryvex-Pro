@@ -9,6 +9,7 @@
         "noImplicitOverride": true,
         "noImplicitReturns": true,
         "outDir": "./dist",
+        "rootDir": "./src",
         "esModuleInterop": true,
         "moduleResolution": "NodeNext",
         // skip error: Interface 'WebGL2RenderingContext' incorrectly extends interface 'WebGL2RenderingContextBase'.

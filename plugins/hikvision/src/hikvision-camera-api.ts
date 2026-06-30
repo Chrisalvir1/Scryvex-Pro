@@ -703,13 +703,13 @@ export class HikvisionCameraAPI implements HikvisionAPI {
         const movement = 40;
         if (command.preset) {
             await this.setPtzPreset(command.preset);
-        } else if (command.pan < 0 || command.pan > 0) {
+        } else if (command.pan !== undefined && (command.pan < 0 || command.pan > 0)) {
             startCommandData = `<?xml version: "1.0" encoding="UTF-8"?><PTZData><pan>${command.pan > 0 ? movement : -movement}</pan><tilt>0</tilt></PTZData>`;
             endCommandData = `<?xml version: "1.0" encoding="UTF-8"?><PTZData><pan>0</pan><tilt>0</tilt></PTZData>`;
-        } else if (command.tilt < 0 || command.tilt > 0) {
+        } else if (command.tilt !== undefined && (command.tilt < 0 || command.tilt > 0)) {
             startCommandData = `<?xml version: "1.0" encoding="UTF-8"?><PTZData><pan>0</pan><tilt>${command.tilt > 0 ? movement : -movement}</tilt></PTZData>`;
             endCommandData = `<?xml version: "1.0" encoding="UTF-8"?><PTZData><pan>0</pan><tilt>0</tilt></PTZData>`;
-        } else if (command.zoom < 0 || command.zoom > 0) {
+        } else if (command.zoom !== undefined && (command.zoom < 0 || command.zoom > 0)) {
             startCommandData = `<?xml version: "1.0" encoding="UTF-8"?><PTZData><zoom>${command.zoom > 0 ? movement : -movement}</zoom></PTZData>`;
             endCommandData = `<?xml version: "1.0" encoding="UTF-8"?><PTZData><zoom>0</zoom></PTZData>`;
         }

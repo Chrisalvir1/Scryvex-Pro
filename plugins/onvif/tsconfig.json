@@ -8,8 +8,15 @@
         "sourceMap": true,
         "baseUrl": ".",
         "paths": {
-            "@scrypted/sdk": ["./node_modules/@scrypted/sdk"],
-            "@scrypted/common/*": ["./node_modules/@scrypted/common/*"]
+            "@scrypted/sdk": [
+                "./node_modules/@scrypted/sdk"
+            ],
+            "@scrypted/sdk/*": [
+                "./node_modules/@scrypted/sdk/dist/src/*"
+            ],
+            "@scrypted/common/*": [
+                "./node_modules/@scrypted/common/*"
+            ]
         }
     },
     "include": [
