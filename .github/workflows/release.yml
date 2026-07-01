@@ -11,6 +11,10 @@ jobs:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
 
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:

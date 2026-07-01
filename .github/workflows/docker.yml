@@ -59,8 +59,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/scrypted:v${{ steps.package-version.outputs.NPM_VERSION }}-${{ matrix.BASE[2] }}
-            ghcr.io/${{ github.repository_owner }}/scrypted:latest
-            ghcr.io/${{ github.repository_owner }}/scrypted:${{ matrix.BASE[2] }}
+            ghcr.io/chrisalvir1/scrypted:v${{ steps.package-version.outputs.NPM_VERSION }}-${{ matrix.BASE[2] }}
+            ghcr.io/chrisalvir1/scrypted:latest
+            ghcr.io/chrisalvir1/scrypted:${{ matrix.BASE[2] }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
