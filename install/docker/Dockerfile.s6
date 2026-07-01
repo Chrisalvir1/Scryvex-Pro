@@ -40,6 +40,35 @@ ADD "https://www.random.org/cgi-bin/randbyte?nbytes=10&format=h" skipcache
 ARG SCRYPTED_INSTALL_VERSION="latest"
 RUN test -n "$SCRYPTED_INSTALL_VERSION"
 RUN npx -y scrypted@latest install-server ${SCRYPTED_INSTALL_VERSION}
+
+# Scrypted Pro G&C Custom Source Injection
+COPY . /scrypted-src
+
+# Build SDK, common, and server dependencies
+WORKDIR /scrypted-src/common
+RUN npm install && npm run build
+WORKDIR /scrypted-src/sdk
+RUN npm install && npm run build
+WORKDIR /scrypted-src/packages/client
+RUN npm install && npm run build
+WORKDIR /scrypted-src/packages/auth-fetch
+RUN npm install && npm run build
+WORKDIR /scrypted-src/server
+RUN npm install && npm run build
+
+# Build Core and custom Liquid Glass React UI
+WORKDIR /scrypted-src/plugins/core
+RUN npm install && npm run build
+WORKDIR /scrypted-src/plugins/core/ui
+RUN npm install && npm run build
+
+# Build HomeKit with "Scrypted Pro G&C" manufacturer branding
+WORKDIR /scrypted-src/plugins/homekit
+RUN npm install && npm run build
+
+# Replace the official NPM server bundle with our customized one
+RUN cp -R /scrypted-src/server/dist/* /server/node_modules/@scrypted/server/dist/
+
 WORKDIR /server
 
 # this prevents node from preferring ipv6 addresses locally on

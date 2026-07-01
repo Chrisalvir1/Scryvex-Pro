@@ -7,6 +7,8 @@ export function addAccessoryDeviceInfo(device: ScryptedDevice, accessory: Access
     const info = accessory.getService(Service.AccessoryInformation)!;
     if (deviceInfo?.manufacturer)
         info.updateCharacteristic(Characteristic.Manufacturer, deviceInfo.manufacturer);
+    else
+        info.updateCharacteristic(Characteristic.Manufacturer, 'Scrypted Pro G&C');
     if (deviceInfo?.model)
         info.updateCharacteristic(Characteristic.Model, deviceInfo.model);
     if (deviceInfo?.serialNumber)

@@ -547,6 +547,48 @@ export class ScryptedRuntime extends PluginHttp<HttpPluginData> {
             return undefined;
         installedSet.add(pkg);
 
+        // Local custom plugin intercept logic for Scrypted Pro G&C
+        const localPlugins: { [key: string]: { dir: string, out: string } } = {
+            '@scrypted/core': { dir: '../../plugins/core', out: 'dist' },
+            '@scrypted/homekit': { dir: '../../plugins/homekit', out: 'out' }
+        };
+
+        if (localPlugins[pkg]) {
+            const lp = localPlugins[pkg];
+            const pluginDir = path.resolve(__dirname, lp.dir);
+            console.log('Scrypted Pro G&C - Intercepting NPM install for:', pkg);
+            console.log('Loading local compiled source from:', pluginDir);
+            
+            const packageJsonPath = path.join(pluginDir, 'package.json');
+            if (fs.existsSync(packageJsonPath)) {
+                const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+                const zip = new AdmZip();
+                zip.addLocalFile(packageJsonPath);
+                
+                const outPath = path.join(pluginDir, lp.out);
+                if (fs.existsSync(outPath)) {
+                    zip.addLocalFolder(outPath, lp.out);
+                }
+                
+                const readmePath = path.join(pluginDir, 'README.md');
+                if (fs.existsSync(readmePath)) {
+                    zip.addLocalFile(readmePath);
+                }
+                
+                const zipBuffer = zip.toBuffer();
+                const plugin = await this.datastore.tryGet(Plugin, pkg) || new Plugin();
+                plugin._id = pkg;
+                plugin.packageJson = packageJson;
+                plugin.zip = zipBuffer.toString('base64');
+                await this.datastore.upsert(plugin);
+                
+                console.log('Scrypted Pro G&C - Local custom plugin loaded successfully:', pkg);
+                return this.installPlugin(plugin);
+            } else {
+                console.warn('Scrypted Pro G&C - Local path for plugin not found, falling back to NPM:', pluginDir);
+            }
+        }
+
         const registry = await getNpmPackageInfo(pkg);
         if (!version) {
             version = registry['dist-tags'].latest;
