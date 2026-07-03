@@ -5,7 +5,14 @@
         "target": "esnext",
         "resolveJsonModule": true,
         "esModuleInterop": true,
-        "sourceMap": true
+        "sourceMap": true,
+        "strict": false,
+        "noImplicitAny": false,
+        "strictNullChecks": false,
+        "strictPropertyInitialization": false,
+        "skipLibCheck": true,
+        "lib": ["esnext"],
+        "types": ["node"]
     },
     "include": [
         "src/**/*"
