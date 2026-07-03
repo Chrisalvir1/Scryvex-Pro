@@ -100,7 +100,8 @@ WORKDIR /scrypted-src/plugins/onvif
 RUN echo "BUILDING_ONVIF" && npm install && npm run build || (echo "=== BUILD FAILED IN plugins/onvif ===" || true)
 
 # Replace the official NPM server bundle with our customized one
-RUN cp -R /scrypted-src/server/dist/* /server/node_modules/@scrypted/server/dist/
+RUN cp -R /scrypted-src/server/dist/* /server/node_modules/@scrypted/server/dist/ && \
+    cp /scrypted-src/server/package.json /server/node_modules/@scrypted/server/package.json
 
 WORKDIR /server
 
