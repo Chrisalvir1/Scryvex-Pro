@@ -106,6 +106,13 @@ RUN cd /scrypted-src/external/werift && git apply /scrypted-src/patches/werift-h
 RUN echo "BUILDING_WERIFT" && cd /scrypted-src/external/werift && npm run build \
     || (echo "=== BUILD FAILED IN external/werift ===" || true)
 
+# FFmpeg camera plugin (homekit depends on this)
+COPY plugins/ffmpeg-camera/ /scrypted-src/plugins/ffmpeg-camera/
+RUN --mount=type=cache,target=/root/.npm \
+    cd /scrypted-src/plugins/ffmpeg-camera && npm install
+RUN echo "BUILDING_FFMPEG_CAMERA" && cd /scrypted-src/plugins/ffmpeg-camera && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/ffmpeg-camera ===" || true)
+
 # HomeKit plugins MUST be copied before webrtc (webrtc imports homekit source at compile time)
 COPY plugins/homekit/ /scrypted-src/plugins/homekit/
 RUN --mount=type=cache,target=/root/.npm \
@@ -131,12 +138,6 @@ RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/webrtc27 && npm install
 RUN echo "BUILDING_WEBRTC27" && cd /scrypted-src/plugins/webrtc27 && npm run build \
     || (echo "=== BUILD FAILED IN plugins/webrtc27 ===" || true)
-
-COPY plugins/ffmpeg-camera/ /scrypted-src/plugins/ffmpeg-camera/
-RUN --mount=type=cache,target=/root/.npm \
-    cd /scrypted-src/plugins/ffmpeg-camera && npm install
-RUN echo "BUILDING_FFMPEG_CAMERA" && cd /scrypted-src/plugins/ffmpeg-camera && npm run build \
-    || (echo "=== BUILD FAILED IN plugins/ffmpeg-camera ===" || true)
 
 COPY plugins/rtsp/ /scrypted-src/plugins/rtsp/
 RUN --mount=type=cache,target=/root/.npm \
