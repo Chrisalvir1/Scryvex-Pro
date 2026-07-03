@@ -30,6 +30,7 @@
       ]
    },
    "dependencies": {
+      "@koush/werift-src": "file:../../external/werift",
       "@scrypted/server": "file:../../server",
       "@scrypted/common": "file:../../common",
       "@scrypted/sdk": "file:../../sdk",
