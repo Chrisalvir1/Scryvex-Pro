@@ -1,6 +1,8 @@
 ARG BASE="noble-full"
 FROM ghcr.io/koush/scrypted-common:${BASE}
 
+ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
+
 # avahi advertiser support
 RUN apt-get update && apt-get -y install \
     libnss-mdns \

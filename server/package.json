@@ -45,7 +45,7 @@
     "@types/whatwg-mimetype": "^3.0.2",
     "@types/ws": "^8.18.1",
     "rimraf": "^6.0.1",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.1-rc"
   },
   "bin": {
     "scrypted-serve": "bin/scrypted-serve"
