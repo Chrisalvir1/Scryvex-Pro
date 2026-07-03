@@ -60,6 +60,13 @@ RUN --mount=type=cache,target=/root/.npm \
 RUN echo "BUILDING_SDK" && cd /scrypted-src/sdk && npm run build \
     || (echo "=== BUILD FAILED IN sdk ===" && cat /root/.npm/_logs/*-debug.log || true)
 
+# Server (moved here because packages/auth-fetch depends on server/src/fetch)
+COPY server/ /scrypted-src/server/
+RUN --mount=type=cache,target=/root/.npm \
+    cd /scrypted-src/server && npm install
+RUN echo "BUILDING_SERVER" && cd /scrypted-src/server && npm run build \
+    || (echo "=== BUILD FAILED IN server ===" || true)
+
 # Common packages (rarely change)
 COPY packages/auth-fetch/ /scrypted-src/packages/auth-fetch/
 RUN --mount=type=cache,target=/root/.npm \
@@ -79,12 +86,6 @@ RUN --mount=type=cache,target=/root/.npm \
 RUN echo "BUILDING_CLIENT" && cd /scrypted-src/packages/client && npm run build \
     || (echo "=== BUILD FAILED IN packages/client ===" || true)
 
-# Server (changes when we fix bugs - each change only invalidates from here down)
-COPY server/ /scrypted-src/server/
-RUN --mount=type=cache,target=/root/.npm \
-    cd /scrypted-src/server && npm install
-RUN echo "BUILDING_SERVER" && cd /scrypted-src/server && npm run build \
-    || (echo "=== BUILD FAILED IN server ===" || true)
 
 # Core plugin + custom UI (changes when we update UI/branding)
 COPY plugins/core/ /scrypted-src/plugins/core/
