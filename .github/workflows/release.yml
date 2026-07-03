@@ -13,10 +13,16 @@ jobs:
 
     permissions:
       contents: write
-      pull-requests: write
 
     steps:
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          draft: false
           prerelease: false
+          generate_release_notes: true

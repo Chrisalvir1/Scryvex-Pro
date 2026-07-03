@@ -7,14 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "The npm tag used to build the Docker image. The tag will be resolved as a specific version on npm, and that will be used to version the docker image."
+        description: "The npm tag used to build the Docker image."
         required: true
         default: "latest"
       publish_tag:
-        description: "The versioned tag for the published Docker image. NPM will use the minor version, Docker should only specify a patch version."
+        description: "The versioned tag for the published Docker image."
         required: false
-  release:
-    types: [published]
 
 jobs:
   build:
@@ -32,36 +30,13 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # Do NOT use submodules: recursive — werift is a fork we patch via patches/werift-h265.patch
+          submodules: false
 
-      - name: Diagnostic host build
-        env:
-          NPM_CONFIG_LEGACY_PEER_DEPS: true
+      - name: Check out external/werift at pinned upstream commit
         run: |
-          (
-            echo "=== NODE VERSION ==="
-            node -v
-            echo "=== NPM VERSION ==="
-            npm -v
-            echo "=== BUILDING SDK ==="
-            cd sdk && npm install && npm run build
-            echo "=== BUILDING COMMON ==="
-            cd ../common && npm install && npm run build
-            echo "=== BUILDING WERIFT ==="
-            cd ../external/werift && npm install && npm run build
-            echo "=== BUILDING HOMEKIT ==="
-            cd ../../plugins/homekit && npm install && npm run build
-          ) 2>&1 | tee build.log
-
-      - name: Upload logs to termbin on failure
-        if: failure()
-        run: |
-          if [ -f build.log ]; then
-            LINK=$(cat build.log | nc termbin.com 9999 || echo "failed")
-            echo "=== DIAGNOSTIC LOGS UPLOADED TO: $LINK ==="
-          else
-            echo "build.log not found"
-          fi
+          git submodule init
+          git submodule update --depth=1 external/werift || true
 
       - name: Set local Scrypted version
         id: package-version
@@ -83,7 +58,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           build-args: |
             BASE=${{ matrix.BASE[0] }}
