@@ -47,6 +47,10 @@ COPY . /scrypted-src
 # Initialize git submodules
 RUN cd /scrypted-src && git submodule update --init --recursive
 
+# Install root dependencies for workspace resolution
+WORKDIR /scrypted-src
+RUN npm install
+
 # Build SDK, common, and server dependencies
 WORKDIR /scrypted-src/common
 RUN npm install && npm run build
