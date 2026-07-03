@@ -90,7 +90,7 @@ jobs:
             SCRYPTED_INSTALL_VERSION=latest
           context: .
           file: install/docker/Dockerfile${{ matrix.BASE[1] }}
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/chrisalvir1/scrypted:v${{ steps.package-version.outputs.NPM_VERSION }}-${{ matrix.BASE[2] }}
