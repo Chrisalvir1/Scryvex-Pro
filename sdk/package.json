@@ -3,6 +3,7 @@
   "version": "0.5.59",
   "description": "",
   "main": "dist/src/index.js",
+  "files": ["dist", "src", "bin", "types", "webpack.config.js"],
   "exports": {
     ".": "./dist/src/index.js",
     "./acl": "./dist/src/acl.js",
