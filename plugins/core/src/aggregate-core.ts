@@ -32,7 +32,7 @@ export class AggregateCore extends ScryptedDeviceBase implements DeviceProvider,
     async createDevice(settings: DeviceCreatorSettings): Promise<string> {
         const { name } = settings;
         const nativeId = `aggregate:${Math.random()}`;
-        await this.reportAggregate(nativeId, [], name?.toString());
+        await this.reportAggregate(nativeId, [], name?.toString() || "");
         const aggregate = new AggregateDevice(this, nativeId);
         aggregate.computeInterfaces();
         this.aggregate.set(nativeId, aggregate);

@@ -38,7 +38,7 @@ function delayWorkerExit(f: ReturnType<WebRTCPlugin['createTrackedFork']>) {
 
 class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCamera & RTCSignalingChannel & Intercom> implements RTCSignalingChannel, VideoCamera, Intercom {
     storageSettings = new StorageSettings(this, {});
-    webrtcIntercom: Promise<Intercom>;
+    webrtcIntercom?: Promise<Intercom>;
 
     constructor(public plugin: WebRTCPlugin, options: SettingsMixinDeviceOptions<RTCSignalingClient & RTCSignalingChannel & Settings & VideoCamera & Intercom>) {
         super(options);
@@ -58,7 +58,7 @@ class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCame
             const ret = await createRTCPeerConnectionSink(
                 session,
                 this.console,
-                undefined,
+                undefined as any,
                 media,
                 this.plugin.storageSettings.values.requireOpus,
                 this.plugin.storageSettings.values.maximumCompatibilityMode,
@@ -82,18 +82,18 @@ class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCame
 
             const forwarder = await createTrackForwarder({
                 timeStart: Date.now(),
-                videoTransceiver: undefined,
+                videoTransceiver: undefined as any,
                 audioTransceiver,
-                isLocalNetwork: undefined, destinationId: undefined, ipv4: undefined, type: undefined,
+                isLocalNetwork: undefined as any, destinationId: undefined as any, ipv4: undefined as any, type: undefined as any,
                 requestMediaStream: async () => media,
                 maximumCompatibilityMode: false,
-                clientOptions: undefined,
+                clientOptions: undefined as any,
             });
 
-            waitClosed(pc).finally(() => forwarder.kill());
-            forwarder.killPromise.finally(() => pc.close());
+            waitClosed(pc).finally(() => forwarder!.kill());
+            forwarder!.killPromise.finally(() => pc.close());
 
-            forwarder.killPromise.finally(() => control.endSession());
+            forwarder!.killPromise.finally(() => control!.endSession());
             return;
         }
 
@@ -119,7 +119,7 @@ class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCame
 
         const options = await legacyGetSignalingSessionOptions(session);
         if (this.mixinDeviceInterfaces.includes(ScryptedInterface.RTCSignalingChannel) && !options?.proxy)
-            return this.mixinDevice.startRTCSignalingSession(session);
+            return this.mixinDevice.startRTCSignalingSession(session) as any;
 
         const device = systemManager.getDeviceById<VideoCamera & Intercom>(this.id);
         const hasIntercom = this.mixinDeviceInterfaces.includes(ScryptedInterface.Intercom);
@@ -305,7 +305,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
     async convertToSignalingChannel(data: any, fromMimeType: string, toMimeType: string, options?: MediaObjectOptions): Promise<RTCSignalingChannel> {
         const plugin = this;
 
-        const console = deviceManager.getMixinConsole(options?.sourceId, this.nativeId);
+        const console = deviceManager.getMixinConsole(options?.sourceId as string, this.nativeId);
 
         if (fromMimeType !== ScryptedMimeTypes.FFmpegInput && fromMimeType !== ScryptedMimeTypes.RequestMediaStream) {
             try {
@@ -325,11 +325,10 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
                 sourceId: options?.sourceId,
             });
 
-            let intercom = sdk.systemManager.getDeviceById<Intercom>(mo.sourceId);
-            if (!intercom.interfaces?.includes(ScryptedInterface.Intercom))
-                intercom = undefined;
+            let device = mo.sourceId ? sdk.systemManager.getDeviceById(mo.sourceId) : undefined;
+            let intercom: Intercom | undefined = (device?.interfaces?.includes(ScryptedInterface.Intercom)) ? (device as any as Intercom) : undefined;
 
-            const audioDirection = intercom ? 'sendrecv' : undefined;
+            const audioDirection = intercom ? 'sendrecv' : undefined as any;
 
             class OnDemandSignalingChannel implements RTCSignalingChannel {
                 async startRTCSignalingSession(session: RTCSignalingSession): Promise<RTCSessionControl> {
@@ -352,7 +351,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
         class OnDemandSignalingChannel implements RTCSignalingChannel {
             async startRTCSignalingSession(session: RTCSignalingSession): Promise<RTCSessionControl> {
                 return createRTCPeerConnectionSink(session, console,
-                    undefined,
+                    'recvonly',
                     mo,
                     plugin.storageSettings.values.requireOpus,
                     plugin.storageSettings.values.maximumCompatibilityMode,
@@ -402,7 +401,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
             const rtcSource = await createRTCPeerConnectionSource({
                 __json_copy_serialize_children: true,
                 nativeId: undefined,
-                mixinId: undefined,
+                mixinId: undefined as any,
                 mediaStreamOptions: {
                     id: 'webrtc',
                     name: 'WebRTC',
@@ -487,7 +486,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
                 ret.push(ScryptedInterface.Intercom, ScryptedInterface.Microphone, ScryptedInterface.Display, ScryptedInterface.VideoCamera);
             }
             else {
-                return;
+                return [];
             }
 
             return ret;
@@ -501,6 +500,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
                 // ScryptedInterface.Settings,
             ];
         }
+        return null as any;
     }
 
     async getMixin(mixinDevice: any, mixinDeviceInterfaces: ScryptedInterface[], mixinDeviceState: WritableDeviceState): Promise<any> {
@@ -531,7 +531,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
     async createDevice(settings: DeviceCreatorSettings): Promise<string> {
         const nativeId = crypto.randomBytes(8).toString('hex');
         await deviceManager.onDeviceDiscovered({
-            name: settings.name?.toString(),
+            name: settings.name?.toString() || '',
             type: ScryptedDeviceType.Camera,
             nativeId,
             interfaces: [
@@ -572,7 +572,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
     }
 
     async getWeriftConfiguration(disableTurn?: boolean): Promise<Partial<PeerConfig>> {
-        let ret: Partial<PeerConfig>;
+        let ret: Partial<PeerConfig> = {};
         if (this.storageSettings.values.weriftConfiguration) {
             try {
                 ret = JSON.parse(this.storageSettings.values.weriftConfiguration);
@@ -586,9 +586,9 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
             ? [...weriftStunServers, ...weriftTurnServers]
             : [...weriftStunServers];
 
-        let iceAdditionalHostAddresses: string[];
-        let iceUseIpv4: boolean;
-        let iceUseIpv6: boolean;
+        let iceAdditionalHostAddresses: string[] | undefined;
+        let iceUseIpv4: boolean | undefined;
+        let iceUseIpv6: boolean | undefined;
         if (this.storageSettings.values.iceInterfaceAddresses !== 'All Addresses') {
             try {
                 // if local addresses are set in scrypted, use those.
@@ -603,7 +603,7 @@ export class WebRTCPlugin extends AutoenableMixinProvider implements DeviceCreat
         if (iceAdditionalHostAddresses.length) {
             // sanity check that atleast one of these addresses is valid... ip may change on server.
             const ni = Object.values(os.networkInterfaces()).flat();
-            iceAdditionalHostAddresses = iceAdditionalHostAddresses.filter(la => ni.find(check => check.address === la));
+            iceAdditionalHostAddresses = iceAdditionalHostAddresses.filter(la => ni.find(check => check?.address === la));
             if (iceAdditionalHostAddresses.length) {
                 // disable the default address collection mechanism and use the explicitly provided list.
                 iceUseIpv4 = false;
@@ -664,8 +664,8 @@ async function createConnection(
         // console.log('pair', pair.protocol.type, pair.localCandidate.host, pair.remoteCandidate.host, pair.remoteCandidate.relatedAddress);
 
         const wasBanned = banned;
-        banned ||= options.ipv4Ban?.includes(pair.remoteCandidate.host);
-        banned ||= options.ipv4Ban?.includes(pair.remoteCandidate.relatedAddress);
+        banned = banned || !!(options.ipv4Ban?.includes(pair.remoteCandidate.host));
+        banned = banned || !!(options.ipv4Ban?.includes(pair.remoteCandidate.relatedAddress as string));
 
         if (!wasBanned && banned) {
             console.warn('Banned 6to4 gateway detected, forcing IPv6.', pair.remoteCandidate.host, pair.remoteCandidate.relatedAddress);
@@ -676,13 +676,13 @@ async function createConnection(
 
         if (!ip.isV4Format(pair.remoteCandidate.host))
             return true;
-        if (!ip.isV4Format(pair.remoteCandidate.relatedAddress))
+        if (!ip.isV4Format(pair.remoteCandidate.relatedAddress as string))
             return true;
         return false;
     }
 
     const cleanup = new Deferred<string>();
-    cleanup.promise.catch(e => this.console.log('cleaning up rtc connection:', e.message));
+    cleanup.promise.catch(e => console.log('cleaning up rtc connection:', e.message));
 
     const connection = new WebRTCConnectionManagement(console, clientSession, requireOpus, maximumCompatibilityMode, clientOptions, options);
     cleanup.promise.finally(() => connection.close().catch(() => { }));
@@ -726,7 +726,7 @@ export async function fork() {
         }): Promise<RTCPeerConnectionPipe> {
             try {
                 const ret = await createRTCPeerConnectionSource({
-                    nativeId: this.nativeId,
+                    nativeId: options.nativeId,
                     mixinId: options.mixinId,
                     mediaStreamOptions: options.mediaStreamOptions,
                     startRTCSignalingSession: (session) => options.startRTCSignalingSession(session),

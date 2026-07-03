@@ -23,7 +23,7 @@ export function isPeerConnectionAlive(pc: RTCPeerConnection) {
 
 export function getWeriftIceServers(configuration: RTCConfiguration): RTCIceServer[] {
     if (!configuration?.iceServers)
-        return;
+        return [];
     const ret: RTCIceServer[] = [];
     for (const ice of configuration.iceServers) {
         if (typeof ice.urls === 'string') {
@@ -52,8 +52,8 @@ function isPrivate(address: string) {
 
 export function isLocalIceTransport(pc: RTCPeerConnection) {
     let isLocalNetwork = true;
-    let destinationId: string;
-    let type: string;
+    let destinationId: string = '';
+    let type: string = '';
     for (const ice of pc.iceTransports) {
         const { remoteAddr, localCandidate, remoteCandidate } = (ice.connection as any).nominated;
         const [address, port] = remoteAddr;
@@ -63,8 +63,8 @@ export function isLocalIceTransport(pc: RTCPeerConnection) {
 
         let sameNetwork = false;
         try {
-            const localAddress = Object.values(os.networkInterfaces()).flat().find(nif => nif.address === localCandidate.host);
-            sameNetwork = ip.cidrSubnet(localAddress.cidr).contains(address);
+            const localAddress = Object.values(os.networkInterfaces()).flat().find(nif => nif?.address === localCandidate.host);
+            sameNetwork = localAddress?.cidr ? ip.cidrSubnet(localAddress.cidr as string).contains(address) : false;
         }
         catch (e) {
         }

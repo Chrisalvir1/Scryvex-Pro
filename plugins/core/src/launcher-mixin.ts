@@ -1,5 +1,19 @@
 import { DeviceState, MixinProvider, Readme, ScryptedDeviceBase, ScryptedDeviceType, ScryptedInterface } from "@scrypted/sdk";
-import { typeToIcon } from "../../../../manage.scrypted.app/src/util/device-icons";
+
+function typeToIcon(type: string): string {
+    switch (type) {
+        case 'Camera': return 'fa-video';
+        case 'Doorbell': return 'fa-bell';
+        case 'Fan': return 'fa-fan';
+        case 'Light': return 'fa-lightbulb';
+        case 'Lock': return 'fa-lock';
+        case 'Sensor': return 'fa-broadcast-tower';
+        case 'Thermostat': return 'fa-thermometer-half';
+        case 'Switch': return 'fa-toggle-on';
+        case 'Outlet': return 'fa-plug';
+        default: return 'fa-question';
+    }
+}
 
 export class LauncherMixin extends ScryptedDeviceBase implements MixinProvider, Readme {
     async getReadmeMarkdown(): Promise<string> {

@@ -481,7 +481,7 @@ export class Automation extends ScryptedDeviceBase implements OnOff, Settings {
 
             const runActions = async (eventSource: ScryptedDevice, eventDetails: EventDetails, eventData: any) => {
                 const pendingKey = staticEvents ? undefined : eventSource.id + ':' + eventDetails.eventInterface;
-                const pending = this.pendings.get(pendingKey);
+                const pending = pendingKey ? this.pendings.get(pendingKey) : undefined;
                 this.console.log('automation trigger key', pendingKey);
 
                 if (runToCompletion && pending) {
@@ -494,7 +494,9 @@ export class Automation extends ScryptedDeviceBase implements OnOff, Settings {
                 const abort: Abort = {
                     aborted: false,
                 }
-                this.pendings.set(pendingKey, abort);
+                if (pendingKey) {
+                    this.pendings.set(pendingKey, abort);
+                }
 
                 try {
                     for (const action of this.data.actions) {
@@ -535,7 +537,7 @@ export class Automation extends ScryptedDeviceBase implements OnOff, Settings {
                     }
                 }
                 finally {
-                    if (!abort.aborted) {
+                    if (!abort.aborted && pendingKey) {
                         this.pendings.delete(pendingKey);
                     }
                 }

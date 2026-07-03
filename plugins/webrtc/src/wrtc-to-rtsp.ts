@@ -74,7 +74,7 @@ export async function createRTCPeerConnectionSource(options: {
                         requiredVideoCodec,
                     ],
                 },
-                iceServers: getWeriftIceServers(setup.configuration),
+                iceServers: getWeriftIceServers(setup.configuration as RTCConfiguration),
             });
 
             waitClosed(ret).then(() => cleanup());
@@ -149,11 +149,11 @@ export async function createRTCPeerConnectionSource(options: {
                             // which is really a sip gateway?
                             const fir = new FullIntraRequest({
                                 senderSsrc: videoTransceiver.receiver.rtcpSsrc,
-                                mediaSsrc: track.ssrc,
+                                mediaSsrc: track.ssrc!,
                                 fir: [
                                     {
                                         sequenceNumber: firSequenceNumber++,
-                                        ssrc: track.ssrc,
+                                        ssrc: track.ssrc!,
                                     }
                                 ]
                             });
@@ -191,10 +191,10 @@ export async function createRTCPeerConnectionSource(options: {
             if (description.type !== 'answer')
                 throw new Error('rtsp setup needs answer sdp');
 
-            rtspServer.sdp = createSdpInput(0, 0, description.sdp);
+            rtspServer.sdp = createSdpInput(0, 0, description.sdp as string);
             const parsedSdp = parseSdp(rtspServer.sdp);
-            audioTrack = parsedSdp.msections.find(msection => msection.type === 'audio').control;
-            videoTrack = parsedSdp.msections.find(msection => msection.type === 'video').control;
+            audioTrack = parsedSdp.msections.find(msection => msection.type === 'audio')?.control as string;
+            videoTrack = parsedSdp.msections.find(msection => msection.type === 'video')?.control as string;
             // console.log('sdp sent', rtspServer.sdp);
 
             await rtspServer.handlePlayback();
@@ -209,7 +209,7 @@ export async function createRTCPeerConnectionSource(options: {
                 return {};
             }
 
-            async createLocalDescription(type: "offer" | "answer", setup: RTCAVSignalingSetup, sendIceCandidate: RTCSignalingSendIceCandidate): Promise<RTCSessionDescriptionInit> {
+            async createLocalDescription(type: "offer" | "answer", setup: RTCAVSignalingSetup, sendIceCandidate?: RTCSignalingSendIceCandidate): Promise<RTCSessionDescriptionInit> {
                 if (type === 'offer')
                     await doSetup(setup);
                 const pc = await peerConnection.promise;
@@ -225,9 +225,9 @@ export async function createRTCPeerConnectionSource(options: {
 
                 if (sendIceCandidate) {
                     pc.onicecandidate = ev => {
-                        console.log('sendIceCandidate', ev.candidate.sdpMLineIndex, ev.candidate.candidate);
+                        console.log('sendIceCandidate', ev.candidate?.sdpMLineIndex, ev.candidate?.candidate);
                         sendIceCandidate({
-                            ...ev.candidate,
+                            ...ev.candidate as any,
                         });
                     };
                 }
@@ -239,7 +239,7 @@ export async function createRTCPeerConnectionSource(options: {
                     await handleRtspSetup(ret);
                     const set = pc.setLocalDescription(answer);
                     if (sendIceCandidate)
-                        return ret;
+                        return ret as RTCSessionDescriptionInit;
                     await set;
                     await gatheringPromise;
                     answer = pc.localDescription || answer;
@@ -250,7 +250,7 @@ export async function createRTCPeerConnectionSource(options: {
                     console.log('createLocalDescription', offer.sdp)
                     const set = pc.setLocalDescription(offer);
                     if (sendIceCandidate)
-                        return createRawResponse(offer);
+                        return createRawResponse(offer) as RTCSessionDescriptionInit;
                     await set;
                     await gatheringPromise;
                     offer = await pc.createOffer();
@@ -275,7 +275,7 @@ export async function createRTCPeerConnectionSource(options: {
 
         const session = new SignalingSession();
         const sc = await startRTCSignalingSession(session);
-        sessionControl.resolve(sc);
+        sessionControl.resolve(sc as RTCSessionControl);
         console.log('waiting for peer connection');
         const pc = await peerConnection.promise;
         console.log('waiting for ice connected');
@@ -300,7 +300,7 @@ export async function createRTCPeerConnectionSource(options: {
                 const { kill: destroy } = await startRtpForwarderProcess(console, ffmpegInput, {
                     audio: {
                         codecCopy: audioCodec.name,
-                        encoderArguments: getFFmpegRtpAudioOutputArguments(ffmpegInput.mediaStreamOptions?.audio, audioTransceiver.sender.codec, maximumCompatibilityMode),
+                        encoderArguments: getFFmpegRtpAudioOutputArguments(ffmpegInput.mediaStreamOptions?.audio as any, audioTransceiver.sender.codec!, maximumCompatibilityMode),
                         onRtp: (rtp) => {
                             const packet = RtpPacket.deSerialize(rtp);
                             const now = Date.now();
@@ -325,7 +325,7 @@ export async function createRTCPeerConnectionSource(options: {
             async stopIntercom() {
                 destroyProcess?.();
 
-                sc.setPlayback({
+                sc!.setPlayback({
                     audio: false,
                     video: false,
                 });

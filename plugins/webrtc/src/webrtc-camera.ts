@@ -5,8 +5,8 @@ import { createRTCPeerConnectionSource, getRTCMediaStreamOptions } from "./wrtc-
 const useSdp = true;
 
 export class WebRTCCamera extends ScryptedDeviceBase implements VideoCamera, RTCSignalingClient, RTCSignalingChannel, Intercom {
-    pendingClient: (session: RTCSignalingSession) => void;
-    intercom: Promise<Intercom>;
+    pendingClient!: (session: RTCSignalingSession) => void;
+    intercom!: Promise<Intercom>;
 
     constructor(public plugin: WebRTCPlugin, nativeId: string) {
         super(nativeId);
@@ -31,7 +31,7 @@ export class WebRTCCamera extends ScryptedDeviceBase implements VideoCamera, RTC
 
         // todo: sdk.fork
         const { mediaObject, getIntercom } = await createRTCPeerConnectionSource({
-            mixinId: undefined,
+            mixinId: undefined as any,
             nativeId: this.nativeId,
             mediaStreamOptions,
             startRTCSignalingSession: session => this.startRTCSignalingSession(session),
@@ -59,7 +59,7 @@ export class WebRTCCamera extends ScryptedDeviceBase implements VideoCamera, RTC
             __proxy_props = { 
                 options: {},
             };
-            options: {};
+            options: {} = {};
 
             async getOptions(): Promise<RTCSignalingOptions> {
                 return {};
@@ -76,9 +76,9 @@ export class WebRTCCamera extends ScryptedDeviceBase implements VideoCamera, RTC
         }
 
         this.pendingClient(new CompletedSession());
-        this.pendingClient = undefined;
+        this.pendingClient = undefined as any;
 
-        return;
+        return undefined as any;
     }
 
     createRTCSignalingSession(): Promise<RTCSignalingSession> {

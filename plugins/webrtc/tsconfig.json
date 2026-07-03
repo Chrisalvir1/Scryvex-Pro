@@ -5,7 +5,13 @@
         "resolveJsonModule": true,
         "moduleResolution": "Node16",
         "esModuleInterop": true,
-        "sourceMap": true
+        "sourceMap": true,
+        "strict": false,
+        "noImplicitAny": false,
+        "strictNullChecks": false,
+        "strictPropertyInitialization": false,
+        "noImplicitThis": false,
+        "skipLibCheck": true
     },
     "include": [
         "src/**/*"

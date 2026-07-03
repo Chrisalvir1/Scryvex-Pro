@@ -92,7 +92,7 @@ function isKeyFrame(nalType: number): boolean {
 // Function to depacketize Aggregation Packets (similar to STAP-A in H.264)
 export function depacketizeAP(data: Buffer) {
     const ret: Buffer[] = [];
-    let lastPos: number;
+    let lastPos: number | undefined = undefined;
     let pos = NAL_HEADER_SIZE;
     while (pos < data.length) {
         if (lastPos !== undefined)
@@ -102,7 +102,8 @@ export function depacketizeAP(data: Buffer) {
         lastPos = pos;
         pos += naluSize;
     }
-    ret.push(data.subarray(lastPos));
+    if (lastPos !== undefined)
+        ret.push(data.subarray(lastPos));
     return ret;
 }
 
@@ -143,11 +144,11 @@ export interface H265CodecInfo {
 
 export class H265Repacketizer {
     extraPackets = 0;
-    fuMax: number;
-    pendingFU: RtpPacket[];
+    fuMax!: number;
+    pendingFU: RtpPacket[] | undefined = [];
     // the AP packet that will be sent before an IDR frame.
-    ap: RtpPacket;
-    fuMin: number;
+    ap?: RtpPacket;
+    fuMin!: number;
     // h265 can send multiple IDR and TRAIL_R frames per RTP timestamp.
     // the repurposed h264-packetizer code sends codec information before every
     // IDR frame.
@@ -175,36 +176,36 @@ export class H265Repacketizer {
     ensureCodecInfo() {
         if (!this.codecInfo) {
             this.codecInfo = {
-                vps: undefined,
-                sps: undefined,
-                pps: undefined,
+                vps: undefined!,
+                sps: undefined!,
+                pps: undefined!,
             };
         }
     }
 
     updateVps(vps: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.vps = vps;
+        this.codecInfo!.vps = vps;
     }
 
     updateSps(sps: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.sps = sps;
+        this.codecInfo!.sps = sps;
     }
 
     updatePps(pps: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.pps = pps;
+        this.codecInfo!.pps = pps;
     }
 
     updateSeiPrefix(sei: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.seiPrefix = sei;
+        this.codecInfo!.seiPrefix = sei;
     }
 
     updateSeiSuffix(sei: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.seiSuffix = sei;
+        this.codecInfo!.seiSuffix = sei;
     }
 
     shouldFilter(nalType: number) {
@@ -302,7 +303,7 @@ export class H265Repacketizer {
         const payload: Buffer[] = [apHeader];
 
         while (datas.length && datas[0].length + LENGTH_FIELD_SIZE <= availableSize && counter < 9) {
-            const nalu = datas.shift();
+            const nalu = datas.shift()!;
             availableSize -= LENGTH_FIELD_SIZE + nalu.length;
             counter += 1;
             const lengthField = Buffer.alloc(2);
@@ -312,7 +313,7 @@ export class H265Repacketizer {
 
         // If no NALUs fit, return the first one for FU packetization
         if (counter === 0)
-            return datas.shift();
+            return datas.shift()!;
 
         // A single NALU AP is unnecessary, return the NALU itself
         if (counter === 1) {
@@ -370,7 +371,7 @@ export class H265Repacketizer {
         originalNalHeader[1] = ((layerId & 0x1F) << 3) | tid;
 
         const getDefragmentedPendingFu = () => {
-            const originalFragments = this.pendingFU.map(packet => packet.payload.subarray(FU_HEADER_SIZE));
+            const originalFragments = this.pendingFU!.map(packet => packet.payload.subarray(FU_HEADER_SIZE));
             originalFragments.unshift(originalNalHeader);
             return Buffer.concat(originalFragments);
         }
@@ -381,7 +382,7 @@ export class H265Repacketizer {
             const splits = splitH265NaluStartCode(defragmented);
 
             while (splits.length) {
-                const split = splits.shift();
+                const split = splits.shift()!;
                 const splitNaluType = getNalType(split);
 
                 if (splitNaluType === NAL_TYPE_VPS) {
@@ -576,11 +577,11 @@ export class H265Repacketizer {
             }
             else if (this.pendingFU.reduce((p, c) => p + c.payload.length - FU_HEADER_SIZE, NAL_HEADER_SIZE) > this.maxPacketSize) {
                 // Refragment FU packets as they are received
-                const last = this.pendingFU[this.pendingFU.length - 1].clone();
+                const last = this.pendingFU![this.pendingFU!.length - 1].clone();
                 const partial: RtpPacket[] = [];
                 this.flushPendingFU(partial);
                 // Retain a FU packet to validate subsequent FU packets
-                const retain = partial.pop();
+                const retain = partial.pop()!;
                 last.payload = retain.payload;
                 this.pendingFU = [last];
                 ret.push(...partial);
@@ -648,7 +649,7 @@ export class H265Repacketizer {
                 // fragmented.
                 const fus: Buffer[] = [];
                 while (depacketized.length) {
-                    const next = depacketized.shift();
+                    const next = depacketized.shift()!;
                     if (next.length <= this.maxPacketSize) {
                         fus.push(next);
                         continue;

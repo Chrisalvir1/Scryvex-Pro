@@ -9,8 +9,8 @@ function isV6Only(address: string) {
 }
 
 export class WeriftSignalingSession implements RTCSignalingSession {
-    remoteDescription: Promise<any>;
-    __proxy_props: { options: {}; };
+    remoteDescription!: Promise<any>;
+    __proxy_props!: { options: {}; };
     options: RTCSignalingOptions = {};
 
     constructor(public console: Console, public pc: RTCPeerConnection) {
@@ -25,15 +25,15 @@ export class WeriftSignalingSession implements RTCSignalingSession {
         // werift turn does not seem to work? maybe? sometimes it does? we ignore it here, and that's fine as only 1 side
         // needs turn.
         // stun candidates will come through here, if connection is slow to establish.
-        this.pc.onIceCandidate.subscribe(candidate => {
-            this.localHasV6 ||= isV6Only(candidate.candidate?.split(' ')?.[4]);
+        this.pc.onIceCandidate.subscribe((candidate: any) => {
+            this.localHasV6 = this.localHasV6 || isV6Only(candidate?.candidate?.split(' ')?.[4] || '');
 
             // this.console.log('local candidate', candidate.candidate);
 
             sendIceCandidate?.({
-                candidate: candidate.candidate,
-                sdpMid: candidate.sdpMid,
-                sdpMLineIndex: candidate.sdpMLineIndex,
+                candidate: candidate?.candidate as string,
+                sdpMid: candidate?.sdpMid,
+                sdpMLineIndex: candidate?.sdpMLineIndex,
             });
         });
 
@@ -65,7 +65,7 @@ export class WeriftSignalingSession implements RTCSignalingSession {
 
     remoteHasV6 = false;
     async addIceCandidate(candidate: RTCIceCandidateInit) {
-        this.remoteHasV6 ||= isV6Only(candidate.candidate?.split(' ')?.[4]);
+        this.remoteHasV6 = this.remoteHasV6 || isV6Only(candidate.candidate?.split(' ')?.[4] || '');
 
         if (candidate.candidate?.includes('relay')) {
             // note: this code is done, werift was modified to ban bad ips like 6to4 relays from tmobile.
@@ -87,6 +87,6 @@ export class WeriftSignalingSession implements RTCSignalingSession {
             await sleep(250);
         }
 
-        await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await this.pc.addIceCandidate(new RTCIceCandidate(candidate as any));
     }
 }

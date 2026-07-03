@@ -30,7 +30,7 @@ function toWerift(s: typeof turnServer | RTCIceServer) {
 
 export function toWeriftConfiguration(configuration: RTCConfiguration) {
     return {
-        iceServers: configuration.iceServers.map(toWerift),
+        iceServers: configuration.iceServers?.map(toWerift),
     }
 }
 

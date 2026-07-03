@@ -101,7 +101,7 @@ export function getFFmpegRtpAudioOutputArguments(audio: AudioStreamOptions, outp
             // choose a better birate? this is on the high end recommendation for voice.
             '-b:a', '40k',
             '-bufsize', '96k',
-            '-ac', outputCodecParameters.channels.toString(),
+            '-ac', (outputCodecParameters.channels || 1).toString(),
         )
 
         if (encoder === 'libopus')

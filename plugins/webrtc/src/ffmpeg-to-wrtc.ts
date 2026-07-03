@@ -58,7 +58,7 @@ export async function createTrackForwarder(options: {
     // const transcodeBaseline = !sessionSupportsH264High || maximumCompatibilityMode;
     const handlesHighResolution = !isMediumResolution && !transcodeBaseline;
 
-    let requestDestination: MediaStreamDestination;
+    let requestDestination: MediaStreamDestination | undefined;
     if (transcodeBaseline) {
         requestDestination = 'medium-resolution';
     }
@@ -110,7 +110,7 @@ export async function createTrackForwarder(options: {
     catch (e) {
     }
 
-    const console = sdk.deviceManager.getMixinConsole(mo.sourceId);
+    const console = sdk.deviceManager.getMixinConsole(mo.sourceId as string);
     const ffmpegInput = await sdk.mediaManager.convertMediaObjectToJSON<FFmpegInput>(mo, ScryptedMimeTypes.FFmpegInput);
     const { mediaStreamOptions } = ffmpegInput;
 
@@ -123,7 +123,7 @@ export async function createTrackForwarder(options: {
         // But it may not report itself as Linux, so do a non-Windows/Mac/iOS check.
         let found = false;
         for (const allow of fullResolutionAllowList) {
-            found ||= options?.clientOptions?.userAgent?.includes(allow);
+            found = found || !!(options?.clientOptions?.userAgent?.includes(allow));
         }
         if (!found) {
             const width = ffmpegInput?.mediaStreamOptions?.video?.width;
@@ -178,7 +178,7 @@ export async function createTrackForwarder(options: {
         }
     }
 
-    const { name: audioCodecName } = getAudioCodec(audioTransceiver.sender.codec);
+    const { name: audioCodecName } = getAudioCodec(audioTransceiver.sender.codec!);
     let audioCodecCopy = maximumCompatibilityMode ? undefined : audioCodecName;
 
     const videoTranscodeArguments: string[] = [];
@@ -187,7 +187,7 @@ export async function createTrackForwarder(options: {
 
     // let videoCodecCopy: RtpCodecCopy = transcode ? undefined : 'h264';
     const compatibleH264 = !mediaStreamOptions?.video?.h264Info?.reserved30 && !mediaStreamOptions?.video?.h264Info?.reserved31;
-    let videoCodecCopy: RtpCodecCopy;
+    let videoCodecCopy: RtpCodecCopy | undefined;
     if (!transcode && compatibleH264) {
         if (mediaStreamOptions?.video?.codec === 'h264')
             videoCodecCopy = 'h264';
@@ -234,7 +234,7 @@ export async function createTrackForwarder(options: {
         videoTranscodeArguments.push('-vcodec', 'copy')
     }
 
-    const audioTranscodeArguments = getFFmpegRtpAudioOutputArguments(ffmpegInput.mediaStreamOptions?.audio, audioTransceiver.sender.codec, maximumCompatibilityMode);
+    const audioTranscodeArguments = getFFmpegRtpAudioOutputArguments(ffmpegInput.mediaStreamOptions?.audio as any, audioTransceiver.sender.codec!, maximumCompatibilityMode);
 
     let needPacketization = !!videoCodecCopy;
     if (transcode) {
@@ -257,7 +257,7 @@ export async function createTrackForwarder(options: {
     if (hasMediaStreamFeedback)
         needPacketization = false;
 
-    let opusRepacketizer: OpusRepacketizer;
+    let opusRepacketizer: OpusRepacketizer = undefined!;
     let lastPacketTs: number = 0;
     const audioRtpTrack: RtpTrack = {
         negotiate: async msection => {
@@ -279,21 +279,21 @@ export async function createTrackForwarder(options: {
         // codecCopy: audioCodecCopy,
         alternateCodecs: ['opus', 'pcm_mulaw', 'pcm_alaw'],
         onRtp: (buffer, codec) => {
-            if (false && audioTransceiver.sender.codec.mimeType?.toLowerCase() === "audio/opus") {
+            if (false && audioTransceiver.sender.codec?.mimeType?.toLowerCase() === "audio/opus") {
                 // this will use 3 20ms frames, 60ms. seems to work up to 6/120ms
                 if (!opusRepacketizer)
                     opusRepacketizer = new OpusRepacketizer(3);
-                for (const rtp of opusRepacketizer.repacketize(RtpPacket.deSerialize(buffer))) {
+                for (const rtp of (opusRepacketizer as any).repacketize(RtpPacket.deSerialize(buffer))) {
                     audioTransceiver.sender.sendRtp(rtp);
                 }
             }
             else {
-                if (codecMap[audioTransceiver.sender.codec.mimeType] !== codec)
-                    findAndSetCodec(audioTransceiver, codecReverseMap[codec]);
+                if ((codecMap as any)[(audioTransceiver.sender.codec?.mimeType) as string] !== codec)
+                    findAndSetCodec(audioTransceiver, (codecReverseMap as any)[codec]);
                 const rtp = RtpPacket.deSerialize(buffer);
                 const now = Date.now();
                 rtp.header.marker = now - lastPacketTs > 1000; // set the marker if it's been more than 1s since the last packet
-                rtp.header.payloadType = audioTransceiver.sender.codec.payloadType;
+                rtp.header.payloadType = audioTransceiver.sender.codec!.payloadType;
                 // pcm audio can be concatenated.
                 // hikvision seems to send 40ms duration packets, so 25 packets per second.
                 audioTransceiver.sender.sendRtp(rtp.serialize());
@@ -355,19 +355,19 @@ export async function createTrackForwarder(options: {
                     // adjust packet size for the rtp packet header (12).
                     repacketizer = new H264Repacketizer(console, videoPacketSize - 12, {
                         ...spsPps,
-                    });
+                    } as any);
                 }
                 else if (videoSection.codec === 'h265') {
                     const spsPpsVps = getSpsPpsVps(videoSection);
                     // adjust packet size for the rtp packet header (12).
                     repacketizer = new H265Repacketizer(console, videoPacketSize - 12, {
                         ...spsPpsVps,
-                    });
+                    } as any);
                 }
 
                 onRtp = (buffer, codec) => {
-                    if (codecMap[videoTransceiver.sender.codec.mimeType] !== codec)
-                        findAndSetCodec(videoTransceiver, codecReverseMap[codec]);
+                    if ((codecMap as any)[(videoTransceiver.sender.codec?.mimeType) as string] !== codec)
+                        findAndSetCodec(videoTransceiver, (codecReverseMap as any)[codec]);
                     const repacketized = repacketizer.repacketize(RtpPacket.deSerialize(buffer));
                     for (const packet of repacketized) {
                         videoTransceiver.sender.sendRtp(packet);
@@ -376,8 +376,8 @@ export async function createTrackForwarder(options: {
             }
             else {
                 onRtp = (buffer, codec) => {
-                    if (codecMap[videoTransceiver.sender.codec.mimeType] !== codec)
-                        findAndSetCodec(videoTransceiver, codecReverseMap[codec]);
+                    if ((codecMap as any)[(videoTransceiver.sender.codec?.mimeType) as string] !== codec)
+                        findAndSetCodec(videoTransceiver, (codecReverseMap as any)[codec]);
                     videoTransceiver.sender.sendRtp(buffer);
                 };
             }
@@ -443,7 +443,7 @@ export function parseOptions(options: RTCSignalingOptions) {
         // not actually seem to confirm the level. the level is merely a hint
         // to make a rough guess as to the decoding capability of the client.
         ?.find(codec => {
-            let sdpFmtpLine = codec.sdpFmtpLine.toLowerCase();
+            let sdpFmtpLine = (codec.sdpFmtpLine || '').toLowerCase();
             for (const hex of highProfilesHex) {
                 if (sdpFmtpLine.includes(`profile-level-id=${hex}`))
                     return true;
@@ -464,9 +464,9 @@ export function parseOptions(options: RTCSignalingOptions) {
 
     const transcodeWidth = Math.max(640, Math.min(screenWidthForTranscodeH264, 1280));
     const devicePixelRatio = options?.screen?.devicePixelRatio || 1;
-    const width = (options?.screen?.width * devicePixelRatio) || undefined;
-    const height = (options?.screen?.height * devicePixelRatio) || undefined;
-    const max = Math.max(width, height);
+    const width = (options?.screen?.width && options?.screen?.devicePixelRatio) ? (options.screen.width * devicePixelRatio) || undefined : undefined;
+    const height = (options?.screen?.height && options?.screen?.devicePixelRatio) ? (options.screen.height * devicePixelRatio) || undefined : undefined;
+    const max = Math.max(width || 0, height || 0);
     const isMediumResolution = !sessionSupportsH264High || (max && max < 1920);
 
     return {
@@ -492,6 +492,7 @@ class WebRTCTrack implements RTCOutputMediaObjectTrack, RTCInputMediaObjectTrack
     }
 
     attachForwarder(f: Awaited<ReturnType<typeof createTrackForwarder>>) {
+        if (!f) return;
         const stopped = this.removed;
         f.killPromise.then(() => stopped.resolve(undefined)).catch(e => stopped.reject(e));
     }
@@ -502,12 +503,14 @@ class WebRTCTrack implements RTCOutputMediaObjectTrack, RTCInputMediaObjectTrack
         this.cleanup(true);
 
         this.removed = new Deferred();
-        this.control = new ScryptedSessionControl(intercom, this.audio);
+        this.control = new ScryptedSessionControl(intercom as Intercom, this.audio);
 
         const f = await createTrackForwarder(this.video, this.audio);
-        this.attachForwarder(f);
-        waitClosed(this.connectionManagement.pc).finally(() => f.kill());
-        this.removed.promise.finally(() => f.kill());
+        if (f) {
+            this.attachForwarder(f);
+            waitClosed(this.connectionManagement.pc).finally(() => f.kill());
+            this.removed.promise.finally(() => f.kill());
+        }
     }
 
     cleanup(cleanupTrackOnly: boolean) {
@@ -578,7 +581,7 @@ export class WebRTCConnectionManagement implements RTCConnectionManagement {
     }
 
     async createTracks(mediaObject: MediaObject) {
-        let requestMediaStream: RequestMediaStream;
+        let requestMediaStream: RequestMediaStream | undefined;
 
         try {
             requestMediaStream = await sdk.connectRPCObject(await sdk.mediaManager.convertMediaObject(mediaObject, ScryptedMimeTypes.RequestMediaStream));
@@ -597,16 +600,15 @@ export class WebRTCConnectionManagement implements RTCConnectionManagement {
             return sdk.connectRPCObject(mo);
         }
 
-        let intercom = sdk.systemManager.getDeviceById<Intercom>(mediaObject.sourceId);
-        if (!intercom.interfaces?.includes(ScryptedInterface.Intercom))
-            intercom = undefined;
+        let device = mediaObject.sourceId ? sdk.systemManager.getDeviceById(mediaObject.sourceId) : undefined;
+        let intercom: Intercom | undefined = (device?.interfaces?.includes(ScryptedInterface.Intercom)) ? (device as any as Intercom) : undefined;
 
         const vtrack = new MediaStreamTrack({
             kind: "video",
         });
 
         const atrack = new MediaStreamTrack({ kind: "audio" });
-        const console = sdk.deviceManager.getMixinConsole(mediaObject.sourceId);
+        const console = sdk.deviceManager.getMixinConsole(mediaObject.sourceId || "");
 
         const timeStart = Date.now();
 
@@ -658,7 +660,7 @@ export class WebRTCConnectionManagement implements RTCConnectionManagement {
         }
         catch (e) {
             this.console.error('negotiation failed', e);
-            this.negotiationDeferred.reject(e);
+            this.negotiationDeferred.reject(e as any);
             throw e;
         }
     }
@@ -689,7 +691,7 @@ export class WebRTCConnectionManagement implements RTCConnectionManagement {
         });
         audioTransceiver.mid = options?.audioMid;
 
-        const ret = new WebRTCTrack(this, videoTransceiver, audioTransceiver, intercom);
+        const ret = new WebRTCTrack(this, videoTransceiver, audioTransceiver, intercom as any);
 
         this.negotiation.then(async () => {
             try {

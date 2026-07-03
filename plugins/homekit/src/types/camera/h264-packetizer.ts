@@ -19,7 +19,7 @@ const STAP_A_HEADER_SIZE = NAL_HEADER_SIZE + LENGTH_FIELD_SIZE;
 // a stap a packet is a packet that aggregates multiple nals
 export function depacketizeStapA(data: Buffer) {
     const ret: Buffer[] = [];
-    let lastPos: number;
+    let lastPos: number | undefined = undefined;
     let pos = NAL_HEADER_SIZE;
     while (pos < data.length) {
         if (lastPos !== undefined)
@@ -29,7 +29,8 @@ export function depacketizeStapA(data: Buffer) {
         lastPos = pos;
         pos += naluSize;
     }
-    ret.push(data.subarray(lastPos));
+    if (lastPos !== undefined)
+        ret.push(data.subarray(lastPos));
     return ret;
 }
 
@@ -78,11 +79,11 @@ export interface H264CodecInfo {
 
 export class H264Repacketizer {
     extraPackets = 0;
-    fuaMax: number;
-    pendingFuA: RtpPacket[];
+    fuaMax!: number;
+    pendingFuA!: RtpPacket[];
     // the stapa packet that will be sent before an idr frame.
-    stapa: RtpPacket;
-    fuaMin: number;
+    stapa!: RtpPacket;
+    fuaMin!: number;
 
     constructor(public console: Console, private maxPacketSize: number, public codecInfo?: H264CodecInfo, public jitterBuffer = new JitterBuffer(console, 4)) {
         this.setMaxPacketSize(maxPacketSize);
@@ -98,25 +99,25 @@ export class H264Repacketizer {
     ensureCodecInfo() {
         if (!this.codecInfo) {
             this.codecInfo = {
-                sps: undefined,
-                pps: undefined,
+                sps: undefined!,
+                pps: undefined!,
             };
         }
     }
 
     updateSps(sps: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.sps = sps;
+        this.codecInfo!.sps = sps;
     }
 
     updatePps(pps: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.pps = pps;
+        this.codecInfo!.pps = pps;
     }
 
     updateSei(sei: Buffer) {
         this.ensureCodecInfo();
-        this.codecInfo.sei = sei;
+        this.codecInfo!.sei = sei;
     }
 
     shouldFilter(nalType: number) {
@@ -210,11 +211,11 @@ export class H264Repacketizer {
 
         while (datas.length && datas[0].length + LENGTH_FIELD_SIZE <= availableSize && counter < 9) {
             const nalu = datas.shift();
-            availableSize -= LENGTH_FIELD_SIZE + nalu.length;
+            availableSize -= LENGTH_FIELD_SIZE + nalu!.length;
             counter += 1;
             const packed = Buffer.alloc(2);
-            packed.writeUInt16BE(nalu.length, 0);
-            payload.push(packed, nalu);
+            packed.writeUInt16BE(nalu!.length, 0);
+            payload.push(packed, nalu!);
         }
 
         // when a stapa packet has a p frame inside it, it may exceed the max packet size.
@@ -237,7 +238,7 @@ export class H264Repacketizer {
     packetizeStapA(datas: Buffer[]) {
         const ret: Buffer[] = [];
         while (datas.length) {
-            const nalu = this.packetizeOneStapA(datas);
+            const nalu = this.packetizeOneStapA(datas)!;
             if (nalu.length < this.maxPacketSize) {
                 ret.push(nalu);
                 continue;
@@ -290,20 +291,20 @@ export class H264Repacketizer {
 
             const splits = splitH264NaluStartCode(defragmented);
             while (splits.length) {
-                const split = splits.shift();
-                const splitNaluType = split[0] & 0x1f;
+                const split = splits.shift()!;
+                const splitNaluType = split![0] & 0x1f;
                 if (splitNaluType === NAL_TYPE_SPS) {
-                    this.updateSps(split);
+                    this.updateSps(split!);
                 }
                 else if (splitNaluType === NAL_TYPE_PPS) {
-                    this.updatePps(split);
+                    this.updatePps(split!);
                 }
                 else {
                     if (splitNaluType === NAL_TYPE_IDR)
                         this.maybeSendStapACodecInfo(first, ret);
 
                     this.fragment(first, ret, {
-                        payload: split,
+                        payload: split!,
                         noStart: !hasFuStart,
                         noEnd: !hasFuEnd,
                         marker: last.header.marker,
@@ -321,7 +322,7 @@ export class H264Repacketizer {
             }
 
             if (!this.pendingFuA.length) {
-                this.pendingFuA = undefined;
+                this.pendingFuA = undefined as any;
                 return;
             }
 
@@ -341,7 +342,7 @@ export class H264Repacketizer {
         }
 
         this.extraPackets -= this.pendingFuA.length - 1;
-        this.pendingFuA = undefined;
+        this.pendingFuA = undefined as any;
     }
 
     createRtpPackets(packet: RtpPacket, nalus: Buffer[], ret: RtpPacket[], hadMarker = packet.header.marker) {
@@ -356,7 +357,7 @@ export class H264Repacketizer {
     maybeSendStapACodecInfo(packet: RtpPacket, ret: RtpPacket[]) {
         if (this.stapa) {
             // stapa with codec information was sent recently, no need to send codec info.
-            this.stapa = undefined;
+            this.stapa = undefined as any;
             return;
         }
 
@@ -444,7 +445,7 @@ export class H264Repacketizer {
                 if (this.pendingFuA)
                     this.console.error('fua restarted. skipping refragmentation of previous fua.', originalNalType);
 
-                this.pendingFuA = undefined;
+                this.pendingFuA = undefined as any;
 
                 // if this is an idr frame, but no sps has been sent via a stapa, dummy one up.
                 // the stream may not contain codec information in stapa or may be sending it
@@ -485,7 +486,7 @@ export class H264Repacketizer {
                 this.flushPendingFuA(partial);
                 // retain a fua packet to validate subsequent fua packets.
                 const retain = partial.pop();
-                last.payload = retain.payload;
+                last.payload = retain!.payload;
                 this.pendingFuA = [last];
                 ret.push(...partial);
             }

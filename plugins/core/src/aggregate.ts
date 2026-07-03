@@ -75,12 +75,12 @@ function createVideoCamera(devices: VideoCamera[], console: Console): VideoCamer
         };
 
         for (let i = 0; i < inputs.length; i++) {
-            ffmpegInput.inputArguments.push(...inputs[i].inputArguments);
+            ffmpegInput.inputArguments!.push(...(inputs[i].inputArguments || []));
             // https://superuser.com/a/891478
             filter.push(`[${i}:v] scale=(iw*sar)*min(${w}/(iw*sar)\\,${h}/ih):ih*min(${w}/(iw*sar)\\,${h}/ih),pad=${w}:${h}:(${w}-iw*min(${w}/iw\\,${h}/ih))/2:(${h}-ih*min(${w}/iw\\,${h}/ih))/2 [pos${i}];`)
         }
         for (let i = inputs.length; i < dim * dim; i++) {
-            ffmpegInput.inputArguments.push(
+            ffmpegInput.inputArguments!.push(
                 '-f', 'lavfi', '-i', `color=black:s=${w}x${h}`,
             );
             filter.push(`[${i}:v] scale=${w}x${h} [pos${i}];`)
@@ -101,7 +101,7 @@ function createVideoCamera(devices: VideoCamera[], console: Console): VideoCamer
         let i = dim * dim - 1;
         filter.push(`[${prev}][pos${i}] overlay=shortest=1:x=${curx % 1920}:y=${cury % 1080}`);
 
-        ffmpegInput.inputArguments.push(
+        ffmpegInput.inputArguments!.push(
             '-filter_complex',
             filter.join(' '),
         );
@@ -111,13 +111,13 @@ function createVideoCamera(devices: VideoCamera[], console: Console): VideoCamer
 
     const createVideoStreamOptions: () => Promise<ResponseMediaStreamOptions[]> = async () => {
         if (devices.length === 1)
-            return devices[0].getVideoStreamOptions();
+            return (await devices[0].getVideoStreamOptions()) || [];
         return [{
             id: 'default',
             name: 'Default',
             container: 'ffmpeg',
             video: {},
-            audio: null,
+            audio: undefined,
         }]
     }
 
@@ -130,7 +130,7 @@ function createVideoCamera(devices: VideoCamera[], console: Console): VideoCamer
             if (devices.length === 1)
                 return devices[0].getVideoStream(options);
 
-            const ffmpegInput = await getVideoStreamWrapped(options);
+            const ffmpegInput = await getVideoStreamWrapped(options!);
 
             return mediaManager.createFFmpegMediaObject(ffmpegInput);
         }
@@ -147,7 +147,7 @@ export class AggregateDevice extends ScryptedDeviceBase implements Settings {
             multiple: true,
             deviceFilter: `id !== '${this.id}' && deviceInterface !== '${ScryptedInterface.Settings}'`,
             onPut: () => {
-                this.core.reportAggregate(this.nativeId, this.computeInterfaces(), this.providedName);
+                this.core.reportAggregate(this.nativeId, this.computeInterfaces(), this.providedName || "");
             }
         }
     })
@@ -185,7 +185,7 @@ export class AggregateDevice extends ScryptedDeviceBase implements Settings {
                     watch: true,
                 }, (source, details, data) => {
                     if (details.property)
-                        ds[details.property] = data;
+                        (ds as any)[details.property] = data;
                 });
                 this.listeners.push(register);
             }
@@ -199,7 +199,7 @@ export class AggregateDevice extends ScryptedDeviceBase implements Settings {
         }
 
         const runAggregator = () => {
-            const values = devices.map(device => device[property]);
+            const values = devices.map(device => (device as any)[property]);
             (this as any)[property] = aggregator(values);
         }
 
@@ -232,7 +232,7 @@ export class AggregateDevice extends ScryptedDeviceBase implements Settings {
                 const iface = parts[1];
                 if (!interfaces.has(iface))
                     interfaces.set(iface, []);
-                interfaces.get(iface).push(id);
+                interfaces.get(iface)!.push(id);
             }
 
             for (const [iface, ids] of interfaces.entries()) {
@@ -252,16 +252,16 @@ export class AggregateDevice extends ScryptedDeviceBase implements Settings {
                 if (iface === ScryptedInterface.VideoCamera) {
                     const camera = createVideoCamera(devices as any, this.console);
                     for (const method of descriptor.methods) {
-                        this[method] = (...args: any[]) => camera[method](...args);
+                        (this as any)[method] = (...args: any[]) => (camera as any)[method](...args);
                     }
                     continue;
                 }
 
                 for (const method of descriptor.methods) {
-                    this[method] = async function (...args: any[]) {
+                    (this as any)[method] = async function (...args: any[]) {
                         const ret: Promise<any>[] = [];
                         for (const device of devices) {
-                            ret.push(device[method](...args));
+                            ret.push((device as any)[method](...args));
                         }
 
                         const results = await Promise.all(ret);

@@ -8,7 +8,7 @@ import sdk, { FFmpegInput, Intercom, MediaObject, RTCSessionControl } from "@scr
 const { mediaManager } = sdk;
 
 export class ScryptedSessionControl implements RTCSessionControl {
-    rtspServer: RtspServer;
+    rtspServer!: RtspServer;
     killed = new Deferred<void>();
 
     constructor(public intercom: Intercom, public audioTransceiver: RTCRtpTransceiver) {
@@ -28,10 +28,10 @@ export class ScryptedSessionControl implements RTCSessionControl {
 
     async setPlaybackInternal(options: { audio: boolean; video: boolean; }): Promise<MediaObject> {
         if (this.killed.finished)
-            return;
+            return undefined as any;
 
         if (!this.intercom)
-            return;
+            return undefined as any;
 
         if (!this.audioTransceiver.receiver.track)
             await this.audioTransceiver.onTrack.asPromise()
@@ -41,7 +41,7 @@ export class ScryptedSessionControl implements RTCSessionControl {
         await this.intercom.stopIntercom();
 
         if (!options.audio) {
-            return;
+            return undefined as any;
         }
 
         this.rtspServer?.client.destroy();
@@ -53,8 +53,8 @@ export class ScryptedSessionControl implements RTCSessionControl {
             container: 'rtsp',
             url,
             mediaStreamOptions: {
-                id: undefined,
-                video: null,
+                id: undefined as any,
+                video: null as any,
             },
             inputArguments: [
                 '-analyzeduration', '0',
@@ -94,8 +94,9 @@ export class ScryptedSessionControl implements RTCSessionControl {
             this.rtspServer = rtspServer;
             rtspServer.console = console;
             await rtspServer.handlePlayback();
-            const parsedSdp = parseSdp(rtspServer.sdp);
-            const audioTrack = parsedSdp.msections.find(msection => msection.type === 'audio').control;
+            const parsedSdp = parseSdp(rtspServer.sdp as string);
+            const audioSection = parsedSdp.msections.find(msection => msection.type === 'audio');
+            const audioTrack = audioSection?.control as string;
 
             track.onReceiveRtp.subscribe(rtpPacket => {
                 rtpPacket.header.payloadType = 110;
