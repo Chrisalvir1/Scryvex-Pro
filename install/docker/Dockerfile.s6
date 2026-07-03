@@ -49,14 +49,14 @@ COPY . /scrypted-src
 # Build SDK, common, and server dependencies
 WORKDIR /scrypted-src/sdk
 RUN echo "BUILDING_SDK" && npm install && npm run build || (echo "=== BUILD FAILED IN sdk ===" && exit 1)
+WORKDIR /scrypted-src/server
+RUN echo "BUILDING_SERVER" && npm install && npm run build || (echo "=== BUILD FAILED IN server ===" && exit 1)
+WORKDIR /scrypted-src/packages/auth-fetch
+RUN echo "BUILDING_AUTH_FETCH" && npm install && npm run build || (echo "=== BUILD FAILED IN packages/auth-fetch ===" && exit 1)
 WORKDIR /scrypted-src/common
 RUN echo "BUILDING_COMMON" && npm install && npm run build || (echo "=== BUILD FAILED IN common ===" && exit 1)
 WORKDIR /scrypted-src/packages/client
 RUN echo "BUILDING_CLIENT" && npm install && npm run build || (echo "=== BUILD FAILED IN packages/client ===" && exit 1)
-WORKDIR /scrypted-src/packages/auth-fetch
-RUN echo "BUILDING_AUTH_FETCH" && npm install && npm run build || (echo "=== BUILD FAILED IN packages/auth-fetch ===" && exit 1)
-WORKDIR /scrypted-src/server
-RUN echo "BUILDING_SERVER" && npm install && npm run build || (echo "=== BUILD FAILED IN server ===" && exit 1)
 
 # Build Core and custom Liquid Glass React UI
 WORKDIR /scrypted-src/plugins/core
