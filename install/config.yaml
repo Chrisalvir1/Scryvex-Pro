@@ -1,7 +1,7 @@
 # Home Assistant Addon Configuration
 name: Scrypted Pro G&C
-version: "v0.144.39-noble-full"
-slug: scrypted_pro
+version: "v0.144.40-noble-full"
+slug: scrypted_pro_gc
 description: Scrypted Pro G&C is a high performance home video integration and automation platform
 url: "https://github.com/chrisalvir/scrypted-pro"
 arch:
@@ -23,8 +23,8 @@ video: true
 image: "ghcr.io/chrisalvir1/scrypted"
 environment:
   SCRYPTED_INSTALL_PLUGIN: "@scrypted/homeassistant"
-  SCRYPTED_VOLUME: "/data/scrypted_data"
-  SCRYPTED_NVR_VOLUME: "/data/scrypted_nvr"
+  SCRYPTED_VOLUME: "/data/scrypted_gc_data"
+  SCRYPTED_NVR_VOLUME: "/data/scrypted_gc_nvr"
   SCRYPTED_ADMIN_ADDRESS: "172.30.32.2"
   SCRYPTED_ADMIN_USERNAME: "homeassistant"
   SCRYPTED_INSTALL_ENVIRONMENT: "ha"
