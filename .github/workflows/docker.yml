@@ -30,7 +30,7 @@ jobs:
         ]
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -38,18 +38,30 @@ jobs:
         env:
           NPM_CONFIG_LEGACY_PEER_DEPS: true
         run: |
-          echo "=== NODE VERSION ==="
-          node -v
-          echo "=== NPM VERSION ==="
-          npm -v
-          echo "=== BUILDING SDK ==="
-          cd sdk && npm install && npm run build
-          echo "=== BUILDING COMMON ==="
-          cd ../common && npm install && npm run build
-          echo "=== BUILDING WERIFT ==="
-          cd ../external/werift && npm install && npm run build
-          echo "=== BUILDING HOMEKIT ==="
-          cd ../../plugins/homekit && npm install && npm run build
+          (
+            echo "=== NODE VERSION ==="
+            node -v
+            echo "=== NPM VERSION ==="
+            npm -v
+            echo "=== BUILDING SDK ==="
+            cd sdk && npm install && npm run build
+            echo "=== BUILDING COMMON ==="
+            cd ../common && npm install && npm run build
+            echo "=== BUILDING WERIFT ==="
+            cd ../external/werift && npm install && npm run build
+            echo "=== BUILDING HOMEKIT ==="
+            cd ../../plugins/homekit && npm install && npm run build
+          ) 2>&1 | tee build.log
+
+      - name: Upload logs to termbin on failure
+        if: failure()
+        run: |
+          if [ -f build.log ]; then
+            LINK=$(cat build.log | nc termbin.com 9999 || echo "failed")
+            echo "=== DIAGNOSTIC LOGS UPLOADED TO: $LINK ==="
+          else
+            echo "build.log not found"
+          fi
 
       - name: Set local Scrypted version
         id: package-version
