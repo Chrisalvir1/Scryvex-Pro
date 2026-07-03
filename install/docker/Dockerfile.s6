@@ -50,7 +50,7 @@ COPY . /scrypted-src
 
 # Build SDK, common, and server dependencies
 WORKDIR /scrypted-src/sdk
-RUN echo "BUILDING_SDK" && npm install && npm run build || (echo "=== BUILD FAILED IN sdk ===" && exit 1)
+RUN echo "BUILDING_SDK" && npm install && npm run build || (echo "=== BUILD FAILED IN sdk ===" && cat /root/.npm/_logs/*-debug.log && exit 1)
 WORKDIR /scrypted-src/server
 RUN echo "BUILDING_SERVER" && npm install && npm run build || (echo "=== BUILD FAILED IN server ===" && exit 1)
 WORKDIR /scrypted-src/packages/auth-fetch
