@@ -1,8 +1,7 @@
 ARG BASE="noble-full"
 FROM ghcr.io/koush/scrypted-common:${BASE}
 
-# ── 1. System packages (cached unless apt commands change) ────────────────────
-# Downgrade Node.js to 20 for native module compatibility
+# ── 1. System packages ────────────────────────────────────────────────────────
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/sources.list.d/nodesource.list && \
@@ -14,22 +13,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
 
-# avahi advertiser support + killall
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get -y install \
-    libnss-mdns \
-    avahi-discover \
-    libavahi-compat-libdnssd-dev \
-    xz-utils \
-    build-essential \
-    git \
-    psmisc
+    libnss-mdns avahi-discover libavahi-compat-libdnssd-dev \
+    xz-utils build-essential git psmisc
 
-# copy s6 overlay configurations and scripts
+# ── 2. s6 overlay + config files ─────────────────────────────────────────────
 COPY install/docker/fs /
 
-# ── 2. s6 process supervisor (cached unless S6_OVERLAY_VERSION changes) ───────
 ARG S6_OVERLAY_VERSION=3.1.5.0
 ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 ENV S6_KEEP_ENV=1
@@ -38,145 +30,134 @@ RUN case "${TARGETARCH}" in \
     amd64) S6_ARCH='x86_64';; \
     arm) S6_ARCH='armhf';; \
     arm64) S6_ARCH='aarch64';; \
-    *) echo "Your system architecture isn't supported."; exit 1 ;; \
+    *) echo "Unsupported arch"; exit 1 ;; \
     esac \
   && cd /tmp \
-  && set -x \
   && curl -SLOf https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz \
   && tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
-  && curl -SLOf  https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz \
+  && curl -SLOf https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz \
   && tar -C / -Jxpf /tmp/s6-overlay-${S6_ARCH}.tar.xz
 
 ENTRYPOINT ["/init"]
 
-# ── 3. Install official Scrypted server base (cached unless version changes) ──
+# ── 3. Official Scrypted server base ─────────────────────────────────────────
 ARG SCRYPTED_INSTALL_VERSION="latest"
 RUN test -n "$SCRYPTED_INSTALL_VERSION"
 RUN --mount=type=cache,target=/root/.npm \
     npx -y scrypted@latest install-server ${SCRYPTED_INSTALL_VERSION}
 
-# ── 4. Copy ONLY package.json files first (for npm install caching) ───────────
-# This way npm install is only re-run when dependencies actually change,
-# NOT every time source code changes.
-COPY sdk/package.json sdk/package-lock.json /scrypted-src/sdk/
-COPY sdk/types/package.json /scrypted-src/sdk/types/
-COPY server/package.json server/package-lock.json /scrypted-src/server/
-COPY packages/auth-fetch/package.json packages/auth-fetch/package-lock.json /scrypted-src/packages/auth-fetch/
-COPY common/package.json common/package-lock.json /scrypted-src/common/
-COPY packages/client/package.json packages/client/package-lock.json /scrypted-src/packages/client/
-COPY plugins/core/package.json plugins/core/package-lock.json /scrypted-src/plugins/core/
-COPY plugins/core/ui/package.json plugins/core/ui/package-lock.json /scrypted-src/plugins/core/ui/
-COPY plugins/homekit/package.json /scrypted-src/plugins/homekit/
-COPY plugins/homekit27/package.json /scrypted-src/plugins/homekit27/
-COPY plugins/webrtc/package.json plugins/webrtc/package-lock.json /scrypted-src/plugins/webrtc/
-COPY plugins/webrtc27/package.json plugins/webrtc27/package-lock.json /scrypted-src/plugins/webrtc27/
-COPY plugins/rtsp/package.json plugins/rtsp/package-lock.json /scrypted-src/plugins/rtsp/
-COPY plugins/onvif/package.json plugins/onvif/package-lock.json /scrypted-src/plugins/onvif/
-COPY plugins/ffmpeg-camera/package.json plugins/ffmpeg-camera/package-lock.json /scrypted-src/plugins/ffmpeg-camera/
-COPY external/werift/package.json external/werift/package-lock.json /scrypted-src/external/werift/
-COPY patches/ /scrypted-src/patches/
-COPY tools/ /scrypted-src/tools/
+# ── 4. Copy source directories INDIVIDUALLY for granular Docker layer caching ─
+# Each COPY is its own layer. If only server/ changes, sdk/build and plugin
+# builds stay cached. Order: shared deps first, frequently-changed code last.
 
-# ── 5. npm install for all packages (CACHED — only reruns if package.json changes) ──
+COPY tools/ /scrypted-src/tools/
+COPY patches/ /scrypted-src/patches/
+
+# SDK (rarely changes)
+COPY sdk/ /scrypted-src/sdk/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/sdk && npm install
-RUN --mount=type=cache,target=/root/.npm \
-    cd /scrypted-src/server && npm install
+RUN echo "BUILDING_SDK" && cd /scrypted-src/sdk && npm run build \
+    || (echo "=== BUILD FAILED IN sdk ===" && cat /root/.npm/_logs/*-debug.log || true)
+
+# Common packages (rarely change)
+COPY packages/auth-fetch/ /scrypted-src/packages/auth-fetch/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/packages/auth-fetch && npm install
+RUN echo "BUILDING_AUTH_FETCH" && cd /scrypted-src/packages/auth-fetch && npm run build \
+    || (echo "=== BUILD FAILED IN packages/auth-fetch ===" || true)
+
+COPY common/ /scrypted-src/common/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/common && npm install
+RUN echo "BUILDING_COMMON" && cd /scrypted-src/common && npm run build \
+    || (echo "=== BUILD FAILED IN common ===" || true)
+
+COPY packages/client/ /scrypted-src/packages/client/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/packages/client && npm install
+RUN echo "BUILDING_CLIENT" && cd /scrypted-src/packages/client && npm run build \
+    || (echo "=== BUILD FAILED IN packages/client ===" || true)
+
+# Server (changes when we fix bugs - each change only invalidates from here down)
+COPY server/ /scrypted-src/server/
+RUN --mount=type=cache,target=/root/.npm \
+    cd /scrypted-src/server && npm install
+RUN echo "BUILDING_SERVER" && cd /scrypted-src/server && npm run build \
+    || (echo "=== BUILD FAILED IN server ===" || true)
+
+# Core plugin + custom UI (changes when we update UI/branding)
+COPY plugins/core/ /scrypted-src/plugins/core/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/core && npm install
+RUN echo "BUILDING_CORE" && cd /scrypted-src/plugins/core && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/core ===" || true)
+
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/core/ui && npm install
+RUN echo "BUILDING_CORE_UI" && cd /scrypted-src/plugins/core/ui && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/core/ui ===" || true)
+
+# WebRTC dependencies (werift - heavy, rarely changes)
+COPY external/werift/ /scrypted-src/external/werift/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/external/werift && npm install
+RUN cd /scrypted-src/external/werift && git apply /scrypted-src/patches/werift-h265.patch || true
+RUN echo "BUILDING_WERIFT" && cd /scrypted-src/external/werift && npm run build \
+    || (echo "=== BUILD FAILED IN external/werift ===" || true)
+
+# WebRTC and FFmpeg camera plugins
+COPY plugins/webrtc/ /scrypted-src/plugins/webrtc/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/webrtc && npm install
+RUN echo "BUILDING_WEBRTC" && cd /scrypted-src/plugins/webrtc && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/webrtc ===" || true)
+
+COPY plugins/ffmpeg-camera/ /scrypted-src/plugins/ffmpeg-camera/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/ffmpeg-camera && npm install
+RUN echo "BUILDING_FFMPEG_CAMERA" && cd /scrypted-src/plugins/ffmpeg-camera && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/ffmpeg-camera ===" || true)
+
+# HomeKit plugins with "Scrypted Pro G&C" branding
+COPY plugins/homekit/ /scrypted-src/plugins/homekit/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/homekit && rm -f package-lock.json && npm install --no-audit --no-fund
+RUN echo "BUILDING_HOMEKIT" && cd /scrypted-src/plugins/homekit && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/homekit (Non-Fatal) ===" && cat /root/.npm/_logs/*-debug.log || true)
+
+COPY plugins/homekit27/ /scrypted-src/plugins/homekit27/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/homekit27 && rm -f package-lock.json && npm install --no-audit --no-fund
+RUN echo "BUILDING_HOMEKIT27" && cd /scrypted-src/plugins/homekit27 && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/homekit27 (Non-Fatal) ===" && cat /root/.npm/_logs/*-debug.log || true)
+
+# WebRTC27, RTSP, ONVIF plugins
+COPY plugins/webrtc27/ /scrypted-src/plugins/webrtc27/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/webrtc27 && npm install
+RUN echo "BUILDING_WEBRTC27" && cd /scrypted-src/plugins/webrtc27 && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/webrtc27 ===" || true)
+
+COPY plugins/rtsp/ /scrypted-src/plugins/rtsp/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/rtsp && npm install
+RUN echo "BUILDING_RTSP" && cd /scrypted-src/plugins/rtsp && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/rtsp ===" || true)
+
+COPY plugins/onvif/ /scrypted-src/plugins/onvif/
 RUN --mount=type=cache,target=/root/.npm \
     cd /scrypted-src/plugins/onvif && npm install
+RUN echo "BUILDING_ONVIF" && cd /scrypted-src/plugins/onvif && npm run build \
+    || (echo "=== BUILD FAILED IN plugins/onvif ===" || true)
 
-# ── 6. NOW copy full source code (only invalidates build steps below) ─────────
-COPY . /scrypted-src
-
-# ── 7. Build all packages (reruns only when source code changes) ──────────────
-WORKDIR /scrypted-src/sdk
-RUN echo "BUILDING_SDK" && npm run build || (echo "=== BUILD FAILED IN sdk ===" && cat /root/.npm/_logs/*-debug.log || true)
-
-WORKDIR /scrypted-src/server
-RUN echo "BUILDING_SERVER" && npm run build || (echo "=== BUILD FAILED IN server ===" || true)
-
-WORKDIR /scrypted-src/packages/auth-fetch
-RUN echo "BUILDING_AUTH_FETCH" && npm run build || (echo "=== BUILD FAILED IN packages/auth-fetch ===" || true)
-
-WORKDIR /scrypted-src/common
-RUN echo "BUILDING_COMMON" && npm run build || (echo "=== BUILD FAILED IN common ===" || true)
-
-WORKDIR /scrypted-src/packages/client
-RUN echo "BUILDING_CLIENT" && npm run build || (echo "=== BUILD FAILED IN packages/client ===" || true)
-
-# Build Core and custom Liquid Glass React UI
-WORKDIR /scrypted-src/plugins/core
-RUN echo "BUILDING_CORE" && npm run build || (echo "=== BUILD FAILED IN plugins/core ===" || true)
-
-WORKDIR /scrypted-src/plugins/core/ui
-RUN echo "BUILDING_CORE_UI" && npm run build || (echo "=== BUILD FAILED IN plugins/core/ui ===" || true)
-
-# Build external dependencies
-WORKDIR /scrypted-src/external/werift
-RUN git apply /scrypted-src/patches/werift-h265.patch || true
-RUN echo "BUILDING_WERIFT" && npm run build || (echo "=== BUILD FAILED IN external/werift ===" || true)
-
-# Build WebRTC and FFmpeg Camera plugins
-WORKDIR /scrypted-src/plugins/webrtc
-RUN echo "BUILDING_WEBRTC" && npm run build || (echo "=== BUILD FAILED IN plugins/webrtc ===" || true)
-
-WORKDIR /scrypted-src/plugins/ffmpeg-camera
-RUN echo "BUILDING_FFMPEG_CAMERA" && npm run build || (echo "=== BUILD FAILED IN plugins/ffmpeg-camera ===" || true)
-
-# Build HomeKit with "Scrypted Pro G&C" manufacturer branding
-WORKDIR /scrypted-src/plugins/homekit
-RUN echo "BUILDING_HOMEKIT" && npm run build || (echo "=== BUILD FAILED IN plugins/homekit (Non-Fatal) ===" && cat /root/.npm/_logs/*-debug.log || true)
-
-WORKDIR /scrypted-src/plugins/homekit27
-RUN echo "BUILDING_HOMEKIT27" && npm run build || (echo "=== BUILD FAILED IN plugins/homekit27 (Non-Fatal) ===" && cat /root/.npm/_logs/*-debug.log || true)
-
-# Build remaining plugins
-WORKDIR /scrypted-src/plugins/webrtc27
-RUN echo "BUILDING_WEBRTC27" && npm run build || (echo "=== BUILD FAILED IN plugins/webrtc27 ===" || true)
-
-WORKDIR /scrypted-src/plugins/rtsp
-RUN echo "BUILDING_RTSP" && npm run build || (echo "=== BUILD FAILED IN plugins/rtsp ===" || true)
-
-WORKDIR /scrypted-src/plugins/onvif
-RUN echo "BUILDING_ONVIF" && npm run build || (echo "=== BUILD FAILED IN plugins/onvif ===" || true)
-
-# ── 8. Inject our custom server dist into the official server installation ────
+# ── 5. Inject custom server dist into official server installation ─────────────
 RUN cp -R /scrypted-src/server/dist/* /server/node_modules/@scrypted/server/dist/ && \
     cp /scrypted-src/server/package.json /server/node_modules/@scrypted/server/package.json
 
 WORKDIR /server
 
-# this prevents node from preferring ipv6 addresses locally on
-# networks with busted ipv6 setups.
-# https://github.com/nodejs/node/issues/41145#issuecomment-992948130
 ENV NODE_OPTIONS="--dns-result-order=ipv4first"
-
-# changing this forces pip and npm to perform reinstalls.
-# if this base image changes, this version must be updated.
 ENV SCRYPTED_BASE_VERSION="20250101"
 
 CMD ["/bin/sh", "-c", "ulimit -c 0; exec npm --prefix /server exec scrypted-serve"]
