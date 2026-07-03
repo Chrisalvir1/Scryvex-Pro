@@ -56,7 +56,7 @@ jobs:
         with:
           build-args: |
             BASE=${{ matrix.BASE[0] }}
-            SCRYPTED_INSTALL_VERSION=${{ steps.package-version.outputs.NPM_VERSION }}
+            SCRYPTED_INSTALL_VERSION=latest
           context: .
           file: install/docker/Dockerfile${{ matrix.BASE[1] }}
           platforms: linux/amd64,linux/arm64
