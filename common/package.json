@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "peerDependencies": {
-    "@scrypted/types": "^0.5.55"
+    "@scrypted/types": "file:../sdk/types"
   },
   "dependencies": {
     "@scrypted/sdk": "file:../sdk",

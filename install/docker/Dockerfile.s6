@@ -46,40 +46,37 @@ RUN npx -y scrypted@latest install-server ${SCRYPTED_INSTALL_VERSION}
 # Scrypted Pro G&C Custom Source Injection
 COPY . /scrypted-src
 
-WORKDIR /scrypted-src
-RUN npm install || (echo "=== ROOT NPM INSTALL FAILED ===" && exit 1)
-
 # Build SDK, common, and server dependencies
 WORKDIR /scrypted-src/common
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/sdk
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/packages/client
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/packages/auth-fetch
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/server
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 
 # Build Core and custom Liquid Glass React UI
 WORKDIR /scrypted-src/plugins/core
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/plugins/core/ui
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 
 # Build HomeKit with "Scrypted Pro G&C" manufacturer branding
 WORKDIR /scrypted-src/plugins/homekit
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 
 # Build WebRTC, RTSP, FFmpeg Camera, and ONVIF plugins locally
 WORKDIR /scrypted-src/plugins/webrtc
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/plugins/rtsp
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/plugins/ffmpeg-camera
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 WORKDIR /scrypted-src/plugins/onvif
-RUN npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
+RUN npm install && npm run build || (echo "=== BUILD FAILED IN $(pwd) ===" && exit 1)
 
 # Replace the official NPM server bundle with our customized one
 RUN cp -R /scrypted-src/server/dist/* /server/node_modules/@scrypted/server/dist/
