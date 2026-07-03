@@ -28,6 +28,8 @@ environment:
   SCRYPTED_ADMIN_ADDRESS: "172.30.32.2"
   SCRYPTED_ADMIN_USERNAME: "homeassistant"
   SCRYPTED_INSTALL_ENVIRONMENT: "ha"
+options: {}
+schema: {}
 backup_exclude:
   - '*/server/**'
   - '*/scrypted_nvr/**'
