@@ -44,7 +44,9 @@ ENTRYPOINT ["/init"]
 ARG SCRYPTED_INSTALL_VERSION="latest"
 RUN test -n "$SCRYPTED_INSTALL_VERSION"
 RUN --mount=type=cache,target=/root/.npm \
-    npx -y scrypted@latest install-server ${SCRYPTED_INSTALL_VERSION}
+    mkdir -p /server && cd /server && \
+    echo '{"name":"scrypted-server","private":true,"dependencies":{}}' > package.json && \
+    npm install --no-audit --no-fund --legacy-peer-deps @scrypted/server@${SCRYPTED_INSTALL_VERSION}
 
 # ── 4. Copy source directories INDIVIDUALLY for granular Docker layer caching ─
 # Each COPY is its own layer. If only server/ changes, sdk/build and plugin
