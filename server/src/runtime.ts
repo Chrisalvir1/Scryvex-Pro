@@ -571,16 +571,26 @@ export class ScryptedRuntime extends PluginHttp<HttpPluginData> {
                 }
                 
                 const outPath = path.join(pluginDir, outFolder);
-                if (fs.existsSync(outPath)) {
-                    zip.addLocalFolder(outPath, outFolder);
+                const pluginZipPath = path.join(outPath, 'plugin.zip');
+                
+                let zipBuffer: Buffer;
+                if (fs.existsSync(pluginZipPath)) {
+                    // Use the scrypted-webpack generated zip directly
+                    zipBuffer = fs.readFileSync(pluginZipPath);
+                } else {
+                    // Fallback for non-webpack plugins (create a zip manually)
+                    if (fs.existsSync(outPath)) {
+                        zip.addLocalFolder(outPath, outFolder);
+                    }
+                    
+                    const readmePath = path.join(pluginDir, 'README.md');
+                    if (fs.existsSync(readmePath)) {
+                        zip.addLocalFile(readmePath);
+                    }
+                    
+                    zipBuffer = zip.toBuffer();
                 }
                 
-                const readmePath = path.join(pluginDir, 'README.md');
-                if (fs.existsSync(readmePath)) {
-                    zip.addLocalFile(readmePath);
-                }
-                
-                const zipBuffer = zip.toBuffer();
                 const plugin = await this.datastore.tryGet(Plugin, pkg) || new Plugin();
                 plugin._id = pkg;
                 plugin.packageJson = packageJson;
