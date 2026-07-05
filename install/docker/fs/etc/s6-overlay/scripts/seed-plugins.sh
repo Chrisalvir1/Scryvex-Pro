@@ -1,20 +1,40 @@
 #!/bin/bash
-# Scrypted Pro G&C - First-boot plugin seeder
+# Scrypted Pro G&C - Version-aware plugin seeder
 # Copies our custom-compiled plugins into the Scrypted volume so they
-# are used instead of the official NPM versions from first launch.
+# are used instead of the official NPM versions.
+# Re-seeds automatically whenever the addon image version changes.
 
 SCRYPTED_VOLUME="${SCRYPTED_VOLUME:-/data/scrypted_data}"
 PLUGINS_DIR="$SCRYPTED_VOLUME/plugins"
 CUSTOM_PLUGINS_DIR="${SCRYPTED_CUSTOM_PLUGINS_DIR:-/scrypted-src/plugins}"
 SEED_FLAG="$SCRYPTED_VOLUME/.gc_plugins_seeded"
 
-# Only seed once - skip if already done
+# Determine current image version from config.yaml baked into the image.
+# Falls back to a build-time hash of the plugins dir so any change triggers a re-seed.
+CONFIG_YAML="/scrypted-src/install/config.yaml"
+if [ -f "$CONFIG_YAML" ]; then
+    CURRENT_VERSION=$(grep '^version:' "$CONFIG_YAML" | sed 's/version:[[:space:]]*"\?//;s/"\?$//' | tr -d ' ')
+else
+    CURRENT_VERSION="unknown"
+fi
+
+# Read the version that was seeded last time (if any)
+SEEDED_VERSION=""
 if [ -f "$SEED_FLAG" ]; then
-    echo "[Scrypted Pro G&C] Custom plugins already seeded, skipping."
+    SEEDED_VERSION=$(grep 'version=' "$SEED_FLAG" | sed 's/version=//')
+fi
+
+# Skip re-seed only when the version matches exactly
+if [ -f "$SEED_FLAG" ] && [ "$SEEDED_VERSION" = "$CURRENT_VERSION" ]; then
+    echo "[Scrypted Pro G&C] Plugins already seeded for version $CURRENT_VERSION, skipping."
     exit 0
 fi
 
-echo "[Scrypted Pro G&C] First boot detected - seeding custom plugins..."
+if [ -n "$SEEDED_VERSION" ]; then
+    echo "[Scrypted Pro G&C] Image updated: $SEEDED_VERSION -> $CURRENT_VERSION. Re-seeding plugins..."
+else
+    echo "[Scrypted Pro G&C] First boot detected - seeding custom plugins..."
+fi
 
 mkdir -p "$PLUGINS_DIR"
 
@@ -59,6 +79,6 @@ if [ -d "$core_ui_src" ]; then
     cp -r "$core_ui_src/." "$core_ui_dest/"
 fi
 
-# Mark as seeded so we don't repeat on every boot
-echo "Seeded by Scrypted Pro G&C on $(date)" > "$SEED_FLAG"
-echo "[Scrypted Pro G&C] Plugin seeding complete!"
+# Mark as seeded with current version so next boot can detect upgrades
+printf "Seeded by Scrypted Pro G&C on $(date)\nversion=%s\n" "$CURRENT_VERSION" > "$SEED_FLAG"
+echo "[Scrypted Pro G&C] Plugin seeding complete for version $CURRENT_VERSION!"
