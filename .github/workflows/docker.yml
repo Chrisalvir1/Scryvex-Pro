@@ -74,6 +74,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/chrisalvir1/scrypted:v${{ steps.package-version.outputs.NPM_VERSION }}-${{ matrix.BASE[2] }}
+            ghcr.io/chrisalvir1/scrypted:${{ steps.package-version.outputs.NPM_VERSION }}
             ghcr.io/chrisalvir1/scrypted:latest
             ghcr.io/chrisalvir1/scrypted:${{ matrix.BASE[2] }}
           # GitHub Actions cache — persists between runs, keyed by branch
