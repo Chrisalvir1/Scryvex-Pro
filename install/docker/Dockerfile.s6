@@ -97,7 +97,8 @@ RUN echo "BUILDING_CORE" && cd /scrypted-src/plugins/core && npm run build \
     && npm pack @scrypted/core@0.3.147 \
     && tar -xzf scrypted-core-*.tgz \
     && unzip package/dist/plugin.zip "fs/dist/*" -d . \
-    && rm -rf package scrypted-core-*.tgz \
+    && mv fs/dist dist \
+    && rm -rf package scrypted-core-*.tgz fs \
     || (echo "=== BUILD FAILED IN plugins/core ===" || true)
 
 
