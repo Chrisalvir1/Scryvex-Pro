@@ -43,6 +43,8 @@ environment:
   SCRYPTED_ADMIN_USERNAME: "homeassistant"
   SCRYPTED_INSTALL_ENVIRONMENT: "ha"
   SCRYPTED_CUSTOM_PLUGINS_DIR: "/scrypted-src/plugins"
+  SCRYPTED_HTTPS_PORT: "11443"
+  SCRYPTED_HTTP_PORT: "11080"
 options: {}
 schema: {}
 backup_exclude:
