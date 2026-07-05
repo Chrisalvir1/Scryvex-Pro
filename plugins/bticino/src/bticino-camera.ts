@@ -15,7 +15,7 @@ import { safePrintFFmpegArguments } from '@scrypted/common/src/media-helpers';
 import { PersistentSipManager } from './persistent-sip-manager';
 import { InviteHandler } from './bticino-inviteHandler';
 import { SipOptions, SipRequest } from '../../sip/src/sip-manager';
-import { startRtpForwarderProcess } from '../../webrtc/src/rtp-forwarders';
+import { startRtpForwarderProcess } from '../../webrtc27/src/rtp-forwarders';
 import fs from "fs"
 import url from "url"
 import path from 'path';

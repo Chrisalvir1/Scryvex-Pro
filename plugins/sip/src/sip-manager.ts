@@ -1,7 +1,7 @@
 import { noop, Subject } from 'rxjs'
 import { randomInteger, randomString } from './util'
 import { RtpDescription, RtpOptions, RtpStreamDescription } from './rtp-utils'
-import { decodeSrtpOptions } from '../../ring/src/srtp-utils'
+import { decodeSrtpOptions } from '../../ring27/src/srtp-utils'
 import { stringify } from '@slyoldfox/sip'
 import { timeoutPromise } from '@scrypted/common/src/promise-utils';
 import sdp from 'sdp'

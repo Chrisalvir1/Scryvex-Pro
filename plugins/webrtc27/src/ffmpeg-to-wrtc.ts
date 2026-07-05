@@ -3,8 +3,8 @@ import { addVideoFilterArguments } from "@scrypted/common/src/ffmpeg-helpers";
 import { connectRTCSignalingClients, legacyGetSignalingSessionOptions } from "@scrypted/common/src/rtc-signaling";
 import { getSpsPps, getSpsPpsVps, MSection } from "@scrypted/common/src/sdp-utils";
 import sdk, { FFmpegInput, FFmpegTranscodeStream, Intercom, MediaObject, MediaStreamDestination, MediaStreamFeedback, RequestMediaStream, RTCAVSignalingSetup, RTCConnectionManagement, RTCInputMediaObjectTrack, RTCOutputMediaObjectTrack, RTCSignalingOptions, RTCSignalingSession, ScryptedInterface, ScryptedMimeTypes } from "@scrypted/sdk";
-import { H264Repacketizer } from "../../homekit/src/types/camera/h264-packetizer";
-import { OpusRepacketizer } from "../../homekit/src/types/camera/opus-repacketizer";
+import { H264Repacketizer } from "../../homekit27/src/types/camera/h264-packetizer";
+import { OpusRepacketizer } from "../../homekit27/src/types/camera/opus-repacketizer";
 import { H265Repacketizer } from "./h265-packetizer";
 import { logConnectionState, waitClosed, waitConnected, waitIceConnected } from "./peerconnection-util";
 import { RtpCodecCopy, RtpTrack, RtpTracks, startRtpForwarderProcess } from "./rtp-forwarders";
@@ -42,6 +42,9 @@ export async function createTrackForwarder(options: {
     requestMediaStream: RequestMediaStream,
     videoTransceiver: RTCRtpTransceiver, audioTransceiver: RTCRtpTransceiver,
     maximumCompatibilityMode: boolean, clientOptions: RTCSignalingOptions,
+    directRemuxMode?: string,
+    videoCodecOverride?: string,
+    audioCodecOverride?: string,
 }) {
     const {
         timeStart,
@@ -50,6 +53,9 @@ export async function createTrackForwarder(options: {
         videoTransceiver, audioTransceiver,
         maximumCompatibilityMode,
         clientOptions,
+        directRemuxMode,
+        videoCodecOverride,
+        audioCodecOverride,
     } = options;
 
     const { sessionSupportsH264High, transcodeWidth, isMediumResolution, width, height } = parseOptions(clientOptions);
@@ -68,19 +74,22 @@ export async function createTrackForwarder(options: {
 
     const hasH265Support = !!videoTransceiver?.codecs.find(codec => codec.mimeType === 'video/H265');
 
+    const videoCodec = (videoCodecOverride && videoCodecOverride !== 'Auto') ? videoCodecOverride : 'h264';
+    const audioCodec = (audioCodecOverride && audioCodecOverride !== 'Auto') ? audioCodecOverride : 'opus';
+
     const mo = await requestMediaStream({
         video: {
             // prefer h264 if available
             // todo: change this to h265 primary after some time to allow plugins to update to new
             // alternateCodecs property.
-            codec: 'h264',
+            codec: videoCodec as any,
             // allow h265 if supported
             alternateCodecs: hasH265Support ? ['h265', 'h264'] : undefined,
             width,
             height,
         },
         audio: {
-            codec: 'opus',
+            codec: audioCodec as any,
             alternateCodecs: ['opus', 'pcm_mulaw', 'pcm_alaw'],
         },
         adaptive: handlesHighResolution
@@ -176,6 +185,13 @@ export async function createTrackForwarder(options: {
                 willNeedTranscode = false;
             }
         }
+    }
+
+    if (directRemuxMode === 'Force Direct Remux') {
+        willNeedTranscode = false;
+    }
+    else if (directRemuxMode === 'Disable Direct Remux') {
+        willNeedTranscode = true;
     }
 
     const { name: audioCodecName } = getAudioCodec(audioTransceiver.sender.codec!);
@@ -553,6 +569,9 @@ export class WebRTCConnectionManagement implements RTCConnectionManagement {
         public options: {
             configuration: RTCConfiguration,
             weriftConfiguration: Partial<PeerConfig>,
+            directRemuxMode?: string,
+            videoCodecOverride?: string,
+            audioCodecOverride?: string,
         }) {
 
         this.pc = new RTCPeerConnection({
@@ -625,6 +644,9 @@ export class WebRTCConnectionManagement implements RTCConnectionManagement {
                     audioTransceiver,
                     maximumCompatibilityMode: this.maximumCompatibilityMode,
                     clientOptions: this.clientOptions,
+                    directRemuxMode: this.options?.directRemuxMode,
+                    videoCodecOverride: this.options?.videoCodecOverride,
+                    audioCodecOverride: this.options?.audioCodecOverride,
                 });
                 return ret;
             },
@@ -750,6 +772,11 @@ export async function createRTCPeerConnectionSink(
     configuration: RTCConfiguration,
     weriftConfiguration: Partial<PeerConfig>,
     clientOffer = true,
+    overrides?: {
+        directRemuxMode?: string,
+        videoCodecOverride?: string,
+        audioCodecOverride?: string,
+    }
 ) {
     const clientOptions = await legacyGetSignalingSessionOptions(clientSignalingSession);
     // console.log('remote options', clientOptions);
@@ -757,6 +784,9 @@ export async function createRTCPeerConnectionSink(
     const connection = new WebRTCConnectionManagement(console, clientSignalingSession, requireOpus, maximumCompatibilityMode, clientOptions, {
         configuration,
         weriftConfiguration,
+        directRemuxMode: overrides?.directRemuxMode,
+        videoCodecOverride: overrides?.videoCodecOverride,
+        audioCodecOverride: overrides?.audioCodecOverride,
     });
 
     const track = await connection.addTrack(mo, {

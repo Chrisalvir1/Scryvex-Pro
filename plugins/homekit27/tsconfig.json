@@ -22,7 +22,15 @@
         "noImplicitAny": false,
         "strictNullChecks": false,
         "noImplicitOverride": false,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "types": [
+            "node"
+        ],
+        "lib": [
+            "es2022",
+            "esnext.disposable",
+            "dom"
+        ]
     },
     "include": [
         "src/**/*"

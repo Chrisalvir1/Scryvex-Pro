@@ -3,7 +3,7 @@ import { HttpFetchOptions } from '@scrypted/common/src/http-auth-fetch';
 import { Readable, PassThrough } from 'stream';
 import { MediaStreamOptions } from '@scrypted/sdk';
 import { Server } from 'net';
-import { Destroyable } from "../../rtsp/src/rtsp";
+import { Destroyable } from "../../rtsp27/src/rtsp";
 import { EventEmitter } from 'events';
 import { getDeviceInfo } from './probe';
 import { AuthRequestOptions, AuthRequst, AuthRequestBody } from './auth-request'

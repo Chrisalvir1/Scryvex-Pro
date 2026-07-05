@@ -155,16 +155,17 @@ async function rollup(): Promise<void> {
     if (out)
         rimrafSync(out);
 
-    let rollupCmd = path.resolve(cwd, 'node_modules/.bin/rollup');
+    let rollupJs = path.resolve(cwd, 'node_modules/rollup/dist/bin/rollup');
 
-    if (!fs.existsSync(rollupCmd)) {
-        rollupCmd = path.resolve(cwd, 'node_modules/@scrypted/sdk/node_modules/.bin/rollup');
-    }
-    if (os.platform().startsWith('win')) {
-        rollupCmd += '.cmd';
+    if (!fs.existsSync(rollupJs)) {
+        rollupJs = path.resolve(cwd, 'node_modules/@scrypted/sdk/node_modules/rollup/dist/bin/rollup');
     }
 
-    const cp = child_process.spawn(rollupCmd, [
+    const registerScript = path.resolve(__dirname, '../../../../tools/typescript-compat/register-fallback.cjs');
+
+    const cp = child_process.spawn(process.execPath, [
+        '-r', registerScript,
+        rollupJs,
         '--config', path.resolve(__dirname, '../../../rollup.nodejs.config.mjs'),
     ], {
         stdio: 'inherit',

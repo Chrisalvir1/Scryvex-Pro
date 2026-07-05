@@ -3,7 +3,7 @@ import { addTrackControls, parseSdp } from '@scrypted/common/src/sdp-utils';
 import sdk, { Battery, Camera, Device, DeviceProvider, FFmpegInput, MediaObject, MotionSensor, RequestMediaStreamOptions, RequestPictureOptions, ResponseMediaStreamOptions, ResponsePictureOptions, ScryptedDeviceBase, ScryptedDeviceType, ScryptedInterface, Setting, Settings, SettingValue, VideoCamera } from '@scrypted/sdk';
 import { StorageSettings } from '@scrypted/sdk/storage-settings';
 import eufy, { CaptchaOptions, EufySecurity, P2PClientProtocol, P2PConnectionType } from 'eufy-security-client';
-import { startRtpForwarderProcess } from '../../webrtc/src/rtp-forwarders';
+import { startRtpForwarderProcess } from '../../webrtc27/src/rtp-forwarders';
 
 import { Deferred } from '@scrypted/common/src/deferred';
 import { Writable } from 'stream';

@@ -2,8 +2,8 @@ import { HikvisionCamera } from "../../hikvision/src/main"
 import sdk, { Camera, Device, DeviceCreatorSettings, DeviceInformation, FFmpegInput, Intercom, MediaObject, MediaStreamOptions, Reboot, RequestPictureOptions, ScryptedDeviceType, ScryptedInterface, ScryptedMimeTypes, Setting, LockState, Readme } from "@scrypted/sdk";
 import { PassThrough } from "stream";
 import { RtpPacket } from '../../../external/werift/packages/rtp/src/rtp/rtp';
-import { createRtspMediaStreamOptions, RtspProvider, UrlMediaStreamOptions } from "../../rtsp/src/rtsp";
-import { startRtpForwarderProcess } from '../../webrtc/src/rtp-forwarders';
+import { createRtspMediaStreamOptions, RtspProvider, UrlMediaStreamOptions } from "../../rtsp27/src/rtsp";
+import { startRtpForwarderProcess } from '../../webrtc27/src/rtp-forwarders';
 import { HikvisionDoorbellAPI, HikvisionDoorbellEvent } from "./doorbell-api";
 import { SipManager, SipRegistration, SipAudioTarget } from "./sip-manager";
 import { parseNumbers } from "xml2js/lib/processors";

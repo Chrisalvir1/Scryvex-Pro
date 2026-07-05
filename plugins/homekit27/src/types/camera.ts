@@ -220,6 +220,15 @@ addSupportedType({
 
         accessory.configureController(controller);
 
+        // Scrypted Pro G&C: Inject custom HomeKit WebRTC Controller
+        // Import must be added at the top: import { CameraWebRTCController } from '../webrtc-controller';
+        try {
+            const { CameraWebRTCController } = require('../webrtc-controller');
+            new CameraWebRTCController(accessory, device);
+        } catch (e) {
+            console.error('[HomeKit WebRTC] Failed to initialize WebRTC Controller', e);
+        }
+
         if (controller.motionService) {
             const motionDevice = device;
             if (!motionDevice) {

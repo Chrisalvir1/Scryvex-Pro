@@ -4,7 +4,7 @@ import type { RTCSignalingSession } from "@scrypted/sdk";
 
 export async function createBrowserSignalingSession(ws: WebSocket, localName: string, remoteName: string) {
     const serializer = createRpcSerializer({
-        sendMessageBuffer: buffer => ws.send(buffer),
+        sendMessageBuffer: buffer => ws.send(buffer as any),
         sendMessageFinish: message => ws.send(JSON.stringify(message)),
     });
 

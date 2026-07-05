@@ -20,7 +20,7 @@
       "webrtc"
    ],
    "scrypted": {
-      "name": "WebRTC 27",
+      "name": "WebRTC Plugin 27",
       "type": "API",
       "babel": true,
       "interfaces": [

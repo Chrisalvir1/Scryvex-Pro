@@ -993,6 +993,92 @@ export class ScryptedRuntime extends PluginHttp<HttpPluginData> {
         // catch kill
         process.on('SIGTERM', () => this.exit());
 
+        // Scrypted Pro G&C: Auto-migrate database from old plugin IDs to TS7 (27-suffixed) versions
+        try {
+            const migrations: { [oldId: string]: string } = {
+                '@scrypted/homekit': '@scrypted/homekit27',
+                '@scrypted/webrtc': '@scrypted/webrtc27',
+                '@scrypted/ring': '@scrypted/ring27',
+                '@scrypted/rtsp': '@scrypted/rtsp27',
+                '@scrypted/onvif': '@scrypted/onvif27',
+                '@scrypted/amcrest': '@scrypted/amcrest27',
+                '@scrypted/hikvision': '@scrypted/hikvision27',
+                '@scrypted/reolink': '@scrypted/reolink27',
+                '@scrypted/tapo': '@scrypted/tapo27',
+                '@scrypted/wyze': '@scrypted/wyze27',
+                '@scrypted/ffmpeg-camera': '@scrypted/ffmpeg-camera27',
+                '@scrypted/google-home': '@scrypted/google-home27',
+                '@scrypted/google-device-access': '@scrypted/google-device-access27',
+                '@scrypted/unifi-protect': '@scrypted/unifi-protect27',
+            };
+
+            // Migrate PluginDevices
+            for await (const pluginDevice of this.datastore.getAll(PluginDevice)) {
+                let changed = false;
+
+                // Migrate pluginId
+                if (migrations[pluginDevice.pluginId]) {
+                    console.log(`[Migration 27] Migrating pluginId of device ${pluginDevice._id} from ${pluginDevice.pluginId} to ${migrations[pluginDevice.pluginId]}`);
+                    pluginDevice.pluginId = migrations[pluginDevice.pluginId];
+                    changed = true;
+                }
+
+                // Migrate pluginId in state properties
+                if (pluginDevice.state && pluginDevice.state[ScryptedInterfaceProperty.pluginId]) {
+                    const oldVal = pluginDevice.state[ScryptedInterfaceProperty.pluginId].value;
+                    if (migrations[oldVal]) {
+                        pluginDevice.state[ScryptedInterfaceProperty.pluginId].value = migrations[oldVal];
+                        changed = true;
+                    }
+                }
+
+                // Migrate mixins
+                if (pluginDevice.state && pluginDevice.state[ScryptedInterfaceProperty.mixins]) {
+                    const mixins: string[] = pluginDevice.state[ScryptedInterfaceProperty.mixins].value || [];
+                    let mixinsChanged = false;
+                    const newMixins = mixins.map(m => {
+                        for (const [oldPkg, newPkg] of Object.entries(migrations)) {
+                            const oldMixin = `mixin:${oldPkg}`;
+                            const newMixin = `mixin:${newPkg}`;
+                            if (m === oldMixin) {
+                                console.log(`[Migration 27] Migrating mixin on device ${pluginDevice._id} from ${oldMixin} to ${newMixin}`);
+                                mixinsChanged = true;
+                                return newMixin;
+                            }
+                        }
+                        return m;
+                    });
+                    if (mixinsChanged) {
+                        pluginDevice.state[ScryptedInterfaceProperty.mixins].value = newMixins;
+                        changed = true;
+                    }
+                }
+
+                if (changed) {
+                    await this.datastore.upsert(pluginDevice);
+                }
+            }
+
+            // Migrate Plugins (the installed plugin registry entries)
+            for (const [oldId, newId] of Object.entries(migrations)) {
+                const oldPlugin = await this.datastore.tryGet(Plugin, oldId);
+                if (oldPlugin) {
+                    console.log(`[Migration 27] Migrating plugin installation entry from ${oldId} to ${newId}`);
+                    // Copy to new ID
+                    const newPlugin = new Plugin();
+                    newPlugin._id = newId;
+                    newPlugin.packageJson = { ...oldPlugin.packageJson, name: newId };
+                    newPlugin.zip = oldPlugin.zip;
+                    await this.datastore.upsert(newPlugin);
+                    // Remove old ID
+                    await this.datastore.remove(oldPlugin);
+                }
+            }
+
+        } catch (e) {
+            console.error('[Migration 27] Error during database migration to 27', e);
+        }
+
         for await (const pluginDevice of this.datastore.getAll(PluginDevice)) {
             // this may happen due to race condition around deletion/update. investigate.
             if (!pluginDevice.state) {
@@ -1066,17 +1152,26 @@ export class ScryptedRuntime extends PluginHttp<HttpPluginData> {
                     if (fs.existsSync(packageJsonPath) && fs.existsSync(pluginZipPath)) {
                         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
                         const pkgName = packageJson.name;
+                        // Only auto-install plugins ending in 27
+                        if (!pkgName || !pkgName.endsWith('27')) continue;
+                        
                         const existingPlugin = plugins.find(p => p._id === pkgName);
                         if (!existingPlugin || semver.gt(packageJson.version, existingPlugin.packageJson.version)) {
-                            console.log(`[Scrypted Pro G&C] Auto-installing custom plugin: ${pkgName}@${packageJson.version}`);
+                            console.log(`[Scrypted Pro G&C] Auto-installing custom local plugin: ${pkgName}@${packageJson.version}`);
                             try {
-                                const newHost = await this.installNpm(pkgName);
-                                if (newHost && !existingPlugin) {
-                                    // Make sure it gets loaded in the loops below if it's new
-                                    const newPlugin = await this.datastore.tryGet(Plugin, pkgName);
-                                    if (newPlugin) {
-                                        plugins.push(newPlugin);
-                                    }
+                                const newPlugin = new Plugin();
+                                newPlugin._id = pkgName;
+                                newPlugin.packageJson = packageJson;
+                                newPlugin.zip = fs.readFileSync(pluginZipPath).toString('base64');
+                                
+                                await this.datastore.upsert(newPlugin);
+                                await this.installPlugin(newPlugin);
+                                
+                                if (!existingPlugin) {
+                                    plugins.push(newPlugin);
+                                } else {
+                                    const index = plugins.indexOf(existingPlugin);
+                                    plugins[index] = newPlugin;
                                 }
                             } catch (err) {
                                 console.error(`[Scrypted Pro G&C] Failed to auto-install ${pkgName}:`, err);

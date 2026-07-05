@@ -37,7 +37,39 @@ function delayWorkerExit(f: ReturnType<WebRTCPlugin['createTrackedFork']>) {
 }
 
 class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCamera & RTCSignalingChannel & Intercom> implements RTCSignalingChannel, VideoCamera, Intercom {
-    storageSettings = new StorageSettings(this, {});
+    storageSettings = new StorageSettings(this, {
+        directRemuxMode: {
+            title: 'Remux Mode',
+            description: 'Auto is recommended. Force Direct Remux will bypass transcoding if the stream is already WebRTC-compatible.',
+            value: 'Auto',
+            choices: [
+                'Auto',
+                'Force Direct Remux',
+                'Disable Direct Remux',
+            ],
+        },
+        videoCodecOverride: {
+            title: 'Video Codec Override',
+            description: 'Forces WebRTC to use a specific video codec (e.g. h264, h265/HEVC).',
+            value: 'Auto',
+            choices: [
+                'Auto',
+                'h264',
+                'h265',
+            ],
+        },
+        audioCodecOverride: {
+            title: 'Audio Codec Override',
+            description: 'Forces WebRTC to use a specific audio codec (e.g. opus, pcma, pcmu).',
+            value: 'Auto',
+            choices: [
+                'Auto',
+                'opus',
+                'pcm_alaw',
+                'pcm_mulaw',
+            ],
+        },
+    });
     webrtcIntercom?: Promise<Intercom>;
 
     constructor(public plugin: WebRTCPlugin, options: SettingsMixinDeviceOptions<RTCSignalingClient & RTCSignalingChannel & Settings & VideoCamera & Intercom>) {
@@ -64,6 +96,12 @@ class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCame
                 this.plugin.storageSettings.values.maximumCompatibilityMode,
                 this.plugin.getRTCConfiguration(),
                 await this.plugin.getWeriftConfiguration(),
+                true,
+                {
+                    directRemuxMode: this.storageSettings.values.directRemuxMode,
+                    videoCodecOverride: this.storageSettings.values.videoCodecOverride,
+                    audioCodecOverride: this.storageSettings.values.audioCodecOverride,
+                }
             );
             return;
         }
@@ -156,6 +194,17 @@ class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCame
         if (isHevc && ret.video) {
             ret.video.codec = 'h265';
         }
+
+        const videoOverride = this.storageSettings.values.videoCodecOverride;
+        if (videoOverride && videoOverride !== 'Auto' && ret.video) {
+            ret.video.codec = videoOverride as any;
+        }
+
+        const audioOverride = this.storageSettings.values.audioCodecOverride;
+        if (audioOverride && audioOverride !== 'Auto' && ret.audio) {
+            ret.audio.codec = audioOverride as any;
+        }
+
         return ret;
     }
 
@@ -186,6 +235,9 @@ class WebRTCMixin extends SettingsMixinDeviceBase<RTCSignalingClient & VideoCame
                 mediaStreamOptions: this.createVideoStreamOptions(isHevc),
                 startRTCSignalingSession: (session) => this.mixinDevice.startRTCSignalingSession(session),
                 maximumCompatibilityMode: this.plugin.storageSettings.values.maximumCompatibilityMode,
+                directRemuxMode: this.storageSettings.values.directRemuxMode,
+                videoCodecOverride: this.storageSettings.values.videoCodecOverride,
+                audioCodecOverride: this.storageSettings.values.audioCodecOverride,
             });
 
             this.webrtcIntercom = getIntercom();
@@ -741,6 +793,9 @@ export async function fork() {
             mediaStreamOptions: ResponseMediaStreamOptions,
             startRTCSignalingSession: (session: RTCSignalingSession) => Promise<RTCSessionControl | undefined>,
             maximumCompatibilityMode: boolean,
+            directRemuxMode?: string,
+            videoCodecOverride?: string,
+            audioCodecOverride?: string,
         }): Promise<RTCPeerConnectionPipe> {
             try {
                 const ret = await createRTCPeerConnectionSource({
@@ -749,6 +804,9 @@ export async function fork() {
                     mediaStreamOptions: options.mediaStreamOptions,
                     startRTCSignalingSession: (session) => options.startRTCSignalingSession(session),
                     maximumCompatibilityMode: options.maximumCompatibilityMode,
+                    directRemuxMode: options.directRemuxMode,
+                    videoCodecOverride: options.videoCodecOverride,
+                    audioCodecOverride: options.audioCodecOverride,
                 });
                 ret.pcClose().finally(() => delayProcessExit());
                 return ret;

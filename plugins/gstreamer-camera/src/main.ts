@@ -1,6 +1,6 @@
 import sdk, { FFmpegInput, MediaObject, MediaStreamOptions, ResponseMediaStreamOptions, Setting, SettingValue } from "@scrypted/sdk";
 import child_process, { ChildProcess } from "child_process";
-import { CameraProviderBase, CameraBase, UrlMediaStreamOptions } from "../../ffmpeg-camera/src/common";
+import { CameraProviderBase, CameraBase, UrlMediaStreamOptions } from "../../ffmpeg-camera27/src/common";
 // import {} from "../../../common/src/stream-parser"
 // import {} from "../../../common/src/ffmpeg-rebroadcast"
 import net from 'net';

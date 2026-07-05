@@ -1,7 +1,7 @@
 import { SettingsMixinDeviceOptions } from "@scrypted/common/src/settings-mixin";
 import sdk, { MediaObject, ObjectDetector, Readme, RequestMediaStreamOptions, ScryptedDeviceType, ScryptedInterface, Setting, SettingValue, VideoCamera } from "@scrypted/sdk";
 import { StorageSettings, StorageSettingsDevice } from "@scrypted/sdk/storage-settings";
-import { scoreHomeKitStream } from '../../ffmpeg-camera/src/common';
+import { scoreHomeKitStream } from '../../ffmpeg-camera27/src/common';
 import { HomekitMixin } from "./homekit-mixin";
 import { getDebugMode } from "./types/camera/camera-debug-mode-storage";
 

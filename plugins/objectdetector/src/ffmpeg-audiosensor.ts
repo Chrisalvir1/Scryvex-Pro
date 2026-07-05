@@ -1,7 +1,7 @@
 import sdk, { AudioSensor, FFmpegInput, MixinProvider, ScryptedDeviceBase, ScryptedDeviceType, ScryptedInterface, ScryptedMimeTypes, SettingValue, VideoCamera, WritableDeviceState } from "@scrypted/sdk";
 import { SettingsMixinDeviceBase, SettingsMixinDeviceOptions } from "@scrypted/sdk/settings-mixin";
 import { StorageSettings } from "@scrypted/sdk/storage-settings";
-import { startRtpForwarderProcess } from '../../webrtc/src/rtp-forwarders';
+import { startRtpForwarderProcess } from '../../webrtc27/src/rtp-forwarders';
 import { RtpPacket } from "../../../external/werift/packages/rtp/src/rtp/rtp";
 import { sleep } from "@scrypted/common/src/sleep";
 

@@ -3,6 +3,7 @@ import json from '@rollup/plugin-json';
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 import virtual from '@rollup/plugin-virtual';
+import typescriptCompiler from 'typescript-js';
 import { defineConfig } from 'rollup';
 import fs from 'fs';
 import path from 'path';
@@ -110,7 +111,10 @@ const config = defineConfig(
                     `)
             }),
 
-            typescript(tsconfig),
+            typescript({
+                ...tsconfig,
+                typescript: typescriptCompiler,
+            }),
             commonjs({
                 // need ts extension so require calls in ts get resolved.
                 extensions: ['.js', '.ts'],

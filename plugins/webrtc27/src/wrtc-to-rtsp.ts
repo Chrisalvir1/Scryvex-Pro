@@ -33,8 +33,11 @@ export async function createRTCPeerConnectionSource(options: {
     mediaStreamOptions: ResponseMediaStreamOptions,
     startRTCSignalingSession: (session: RTCSignalingSession) => Promise<RTCSessionControl | undefined>,
     maximumCompatibilityMode: boolean,
+    directRemuxMode?: string,
+    videoCodecOverride?: string,
+    audioCodecOverride?: string,
 }): Promise<RTCPeerConnectionPipe> {
-    const { mediaStreamOptions, startRTCSignalingSession, mixinId, nativeId, maximumCompatibilityMode } = options;
+    const { mediaStreamOptions, startRTCSignalingSession, mixinId, nativeId, maximumCompatibilityMode, directRemuxMode, videoCodecOverride, audioCodecOverride } = options;
     const console = mixinId ? sdk.deviceManager.getMixinConsole(mixinId, nativeId) : sdk.deviceManager.getDeviceConsole(nativeId);
 
     const { clientPromise, port } = await listenZeroSingleClient('127.0.0.1');
@@ -64,15 +67,20 @@ export async function createRTCPeerConnectionSource(options: {
         const ensurePeerConnection = (setup: RTCAVSignalingSetup) => {
             if (peerConnection.finished)
                 return;
+            const videoCodecs = [requiredVideoCodec];
+            if (videoCodecOverride === 'h265') {
+                videoCodecs.unshift(optionalVideoCodec);
+            } else if (!videoCodecOverride || videoCodecOverride === 'Auto') {
+                videoCodecs.push(optionalVideoCodec);
+            }
+
             const ret = new RTCPeerConnection({
                 bundlePolicy: setup.configuration?.bundlePolicy as BundlePolicy,
                 codecs: {
                     audio: [
                         ...requiredAudioCodecs,
                     ],
-                    video: [
-                        requiredVideoCodec,
-                    ],
+                    video: videoCodecs,
                 },
                 iceServers: getWeriftIceServers(setup.configuration as RTCConfiguration),
             });

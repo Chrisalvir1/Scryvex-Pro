@@ -12,7 +12,15 @@
         "strictPropertyInitialization": false,
         "noImplicitThis": false,
         "skipLibCheck": true,
-        "noImplicitOverride": false
+        "noImplicitOverride": false,
+        "types": [
+            "node"
+        ],
+        "lib": [
+            "es2022",
+            "esnext.disposable",
+            "dom"
+        ]
     },
     "include": [
         "src/**/*"
