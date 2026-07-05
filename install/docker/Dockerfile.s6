@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get -y install \
     libnss-mdns avahi-discover libavahi-compat-libdnssd-dev \
-    xz-utils build-essential git psmisc
+    xz-utils build-essential git psmisc unzip
 
 # ── 2. s6 overlay + config files ─────────────────────────────────────────────
 COPY install/docker/fs /
