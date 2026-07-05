@@ -11,7 +11,7 @@
 # ║         (NO ghcr.io/koush/scrypted)  → versión controlada      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 name: Scrypted Pro G&C
-version: "0.155.7"
+version: "0.156.0"
 slug: scrypted_pro_gc
 description: Scrypted Pro G&C is a high performance home video integration and automation platform
 url: "https://github.com/chrisalvir/scrypted-pro"
