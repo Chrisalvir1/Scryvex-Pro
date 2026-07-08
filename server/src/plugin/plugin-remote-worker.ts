@@ -133,7 +133,10 @@ export function startPluginRemote(mainFilename: string, pluginId: string, peerSe
 
             const pluginReader = async (name: string) => {
                 const filename = path.join(unzippedPath, name);
-                return await fs.promises.readFile(filename).catch(() => { }) || undefined;
+                return await fs.promises.readFile(filename).catch((e) => { 
+                    getPluginConsole?.()?.log('PLUGIN READER ERROR:', filename, e);
+                    return undefined;
+                });
             };
 
             const pluginConsole = getPluginConsole?.();
@@ -208,7 +211,12 @@ export function startPluginRemote(mainFilename: string, pluginId: string, peerSe
 
             await installOptionalDependencies(getPluginConsole(), packageJson);
 
-            const main = await pluginReader(mainNodejs);
+            const mainNodejsFile = mainNodejs;
+            getPluginConsole?.()?.log('ATTEMPTING TO READ PLUGIN SCRIPT:', mainNodejsFile);
+            const main = await pluginReader(mainNodejsFile);
+            if (!main) {
+                getPluginConsole?.()?.error('PLUGIN SCRIPT IS UNDEFINED! mainNodejs was:', mainNodejsFile);
+            }
             const script = main!.toString();
 
             scrypted.connect = (socket, options) => {

@@ -1165,6 +1165,13 @@ export class ScryptedRuntime extends PluginHttp<HttpPluginData> {
                                 newPlugin.packageJson = packageJson;
                                 newPlugin.zip = fs.readFileSync(pluginZipPath).toString('base64');
                                 
+                                // FORCE zip invalidation so it fully re-extracts:
+                                const pluginVolume = path.join(process.env.SCRYPTED_VOLUME || '/server/volume', 'plugins', pkgName);
+                                const zipDir = path.join(pluginVolume, 'zip');
+                                if (fs.existsSync(zipDir)) {
+                                    fs.rmSync(zipDir, { recursive: true, force: true });
+                                }
+                                
                                 await this.datastore.upsert(newPlugin);
                                 await this.installPlugin(newPlugin);
                                 
