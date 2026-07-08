@@ -75,7 +75,7 @@ setup_compose_files() {
     info "Copiando docker-compose.yml..."
 
     # Detectar dónde está el script para copiar desde el repo
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 
     if [[ -f "$SCRIPT_DIR/docker-compose.yml" ]]; then
         cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"

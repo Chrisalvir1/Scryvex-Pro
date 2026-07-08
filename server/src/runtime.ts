@@ -1152,11 +1152,12 @@ export class ScryptedRuntime extends PluginHttp<HttpPluginData> {
                     if (fs.existsSync(packageJsonPath) && fs.existsSync(pluginZipPath)) {
                         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
                         const pkgName = packageJson.name;
-                        // Only auto-install plugins ending in 27
-                        if (!pkgName || !pkgName.endsWith('27')) continue;
+                        // Only auto-install plugins ending in 27 or core
+                        if (!pkgName || (!pkgName.endsWith('27') && pkgName !== '@scrypted/core')) continue;
                         
                         const existingPlugin = plugins.find(p => p._id === pkgName);
-                        if (!existingPlugin || semver.gt(packageJson.version, existingPlugin.packageJson.version)) {
+                        const isCoreUpdate = pkgName === '@scrypted/core';
+                        if (!existingPlugin || isCoreUpdate || semver.gt(packageJson.version, existingPlugin.packageJson.version)) {
                             console.log(`[Scryvex Pro] Auto-installing custom local plugin: ${pkgName}@${packageJson.version}`);
                             try {
                                 const newPlugin = new Plugin();
