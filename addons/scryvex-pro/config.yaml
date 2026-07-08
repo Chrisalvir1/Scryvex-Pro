@@ -21,3 +21,4 @@ ingress_port: 11080
 panel_icon: mdi:cctv
 panel_title: Scryvex Pro
 webui: http://[HOST]:[PORT:11080]/
+init: false
