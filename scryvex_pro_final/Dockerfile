@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src/app
 
 # Clone the repository and build
-RUN git clone https://github.com/Chrisalvir1/Scryvex-Pro.git . \
+RUN git clone https://github.com/Chrisalvir1/Scryvex-Pro-V2.git . \
     && pnpm install \
     && pnpm run build
 
