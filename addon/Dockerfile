@@ -22,12 +22,16 @@ RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 # 3. Directorio de trabajo
 WORKDIR /usr/src/app
 
-# 4. Clonar el codigo CON submodulos
-ARG CACHE_BUST=2
-RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
-    https://github.com/Chrisalvir1/Scryvex-Pro-V2.git .
+# 4. Clonar el codigo principal
+ARG CACHE_BUST=3
+RUN git clone --depth 1 https://github.com/Chrisalvir1/Scryvex-Pro-V2.git .
 
-# 5. Instalar dependencias (los submodulos ahora funcionan bien gracias a .gitmodules absoluto)
+# 5. FIX DEFINITIVO: Clonar manualmente los submodulos porque Git perdio los enlaces
+RUN rm -rf external/werift && git clone --depth 1 https://github.com/koush/werift-webrtc.git external/werift
+RUN rm -rf external/unifi-protect && git clone --depth 1 https://github.com/koush/unifi-protect.git external/unifi-protect
+RUN rm -rf external/ring-client-api && git clone --depth 1 -b fork https://github.com/koush/ring.git external/ring-client-api
+
+# 6. Instalar dependencias
 RUN pnpm install --no-frozen-lockfile
 
 # 6. Build del servidor
