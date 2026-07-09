@@ -14,9 +14,10 @@ interface UseCamerasReturn {
     refetch: () => Promise<void>;
 }
 
-const WS_RECONNECT_DELAY = 3000;   // ms before first reconnect
-const WS_MAX_DELAY       = 30000;  // max backoff cap
-const API_BASE           = '/api/cameras';
+const WS_RECONNECT_DELAY   = 3000;
+const WS_MAX_DELAY         = 30000;
+const WS_MAX_ATTEMPTS      = 5;   // give up WebSocket after 5 failures
+const API_BASE             = '/api/cameras';
 
 export function useScryptedCameras(): UseCamerasReturn {
     const [cameras, setCameras]               = useState<Camera[]>([]);
@@ -29,6 +30,7 @@ export function useScryptedCameras(): UseCamerasReturn {
     const reconnectDelay  = useRef(WS_RECONNECT_DELAY);
     const reconnectTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isMounted       = useRef(true);
+    const wsAttempts      = useRef(0);
 
     // ── REST: fetch full camera list ──────────────────────────────────────────
     const fetchCameras = useCallback(async () => {
@@ -136,8 +138,13 @@ export function useScryptedCameras(): UseCamerasReturn {
 
         ws.onclose = () => {
             if (!isMounted.current) return;
+            wsAttempts.current += 1;
+            if (wsAttempts.current >= WS_MAX_ATTEMPTS) {
+                // Give up WebSocket — REST data is still shown
+                setConnectionState('error');
+                return;
+            }
             setConnectionState('reconnecting');
-            // Exponential backoff up to WS_MAX_DELAY
             reconnectTimer.current = setTimeout(() => {
                 reconnectDelay.current = Math.min(reconnectDelay.current * 2, WS_MAX_DELAY);
                 connectWs();
