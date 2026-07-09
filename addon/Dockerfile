@@ -1,29 +1,29 @@
-ARG BUILD_FROM
+ARG BUILD_FROM=node:24-bookworm-slim
 FROM $BUILD_FROM
 
-ENV DEBIAN_FRONTEND=noninteractive
+# 1. Instalar dependencias del sistema operativo (FFmpeg es vital para tu Fase 3)
 RUN apt-get update && apt-get install -y \
-    curl \
+    ffmpeg \
+    postgresql-client \
     git \
-    build-essential \
     python3 \
     python3-pip \
+    build-essential \
     libavahi-compat-libdnssd-dev \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g pnpm
+    && rm -rf /var/lib/apt/lists/*
 
+# 2. Habilitar pnpm de forma nativa
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# 3. Establecer el directorio de trabajo
 WORKDIR /usr/src/app
 
-# Clone the repository
+# 4. Clonar el codigo (Sustituyo COPY . . por git clone para evitar el crash de contexto Docker en HA Add-ons)
 RUN git clone https://github.com/Chrisalvir1/Scryvex-Pro-V2.git .
 
-# Use the magic asterisk to prevent failure if pnpm-lock.yaml is missing
-COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
+# 5. Instalar las dependencias (el flag --no-frozen-lockfile evita errores si no hay lockfile)
+RUN pnpm install --no-frozen-lockfile
 
-# Install dependencies and build
-RUN pnpm install
-RUN pnpm run build
-
-# Start the server
-CMD ["pnpm", "run", "start"]
+# 6. Dar permisos al script de inicio y ejecutar
+RUN chmod a+x run.sh
+CMD [ "./run.sh" ]
