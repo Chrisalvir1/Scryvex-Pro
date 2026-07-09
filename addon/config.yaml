@@ -16,6 +16,5 @@ panel_icon: mdi:cctv
 hassio_api: true
 homeassistant_api: true
 host_network: true
-image: "ghcr.io/chrisalvir1/scryvex"
 options: {}
 schema: {}
