@@ -3,4 +3,5 @@ packages:
   - 'sdk'
   - 'plugins/*'
   - '!plugins/cloud'
+  - '!plugins/homekit'
   - 'frontend'
