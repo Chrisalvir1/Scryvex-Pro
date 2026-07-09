@@ -10,14 +10,6 @@ host_network: true
 map:
   - config:rw
   - data:rw
-ports:
-  9090/tcp: 9090
-  4000/udp: 4000
-  55600/tcp: 55600
-ports_description:
-  9090/tcp: "Liquid Glass UI Web Interface"
-  4000/udp: "WebRTC HKSV Port"
-  55600/tcp: "Red Matter Base Port"
 panel_icon: mdi:cctv
 panel_title: "Scryvex PRO"
 panel_admin: false
