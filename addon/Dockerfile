@@ -16,17 +16,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Habilitar pnpm via corepack
-RUN corepack enable && corepack prepare pnpm@9 --activate
+# 2. Habilitar pnpm v11 (version actual solicitada)
+RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 
 # 3. Directorio de trabajo
 WORKDIR /usr/src/app
 
-# 4. Clonar el codigo CON submodulos (external/werift, etc son submodulos obligatorios)
+# 4. Clonar el codigo CON submodulos
+ARG CACHE_BUST=1
 RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
     https://github.com/Chrisalvir1/Scryvex-Pro-V2.git .
 
-# 5. Instalar dependencias desde la raiz (pnpm workspace resuelve todo junto)
+# 5. Eliminar plugins con submodulos relativos rotos que no existen en Docker
+RUN rm -rf plugins/homekit plugins/cloud plugins/vscode-typescript
+
+# 6. Instalar dependencias (ahora sin los plugins rotos)
 RUN pnpm install --no-frozen-lockfile
 
 # 6. Build del servidor
