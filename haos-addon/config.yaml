@@ -1,0 +1,15 @@
+name: "SCRYVEX PRO V2"
+version: "1.0.0"
+url: "https://github.com/Chrisalvir1/Scryvex-Pro"
+slug: "haos_addon"
+description: "Zero-Latency Local-First NVR con YOLOv10 y Matter 1.6"
+arch:
+  - aarch64
+init: false
+host_network: true
+map:
+  - config:rw
+panel_icon: mdi:cctv
+panel_title: "Scryvex PRO"
+panel_admin: false
+webui: "http://[HOST]:9090"
