@@ -1,7 +1,6 @@
-name: "SCRYVEX PRO V2"
+name: "Scryvex Pro"
+slug: scryvex_pro
 version: "1.0.0"
-url: "https://github.com/Chrisalvir1/Scryvex-Pro"
-slug: "scryvex"
 description: "Zero-Latency Local-First NVR con YOLOv10 y Matter 1.6"
 arch:
   - aarch64
