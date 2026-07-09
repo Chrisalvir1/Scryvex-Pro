@@ -13,13 +13,32 @@ const STATUS_COLORS: Record<Camera['status'], string> = {
     unknown: 'bg-gray-500/20 text-gray-400 border border-gray-500/30',
 };
 
-const STATUS_LABELS: Record<Camera['status'], string> = {
-    online:  'EN LÍNEA',
-    offline: 'DESCONECTADA',
+const STATUS_LABELS: Record<string, string> = {
+    online: 'ONLINE',
+    offline: 'OFFLINE',
     unknown: 'DESCONOCIDO',
 };
 
 type ActiveTab = 'preview' | 'logs' | 'info' | 'matter';
+
+// Helper to determine the camera brand logo based on its name
+function getBrandLogo(name: string): string {
+    const n = name.toLowerCase();
+    if (n.includes('ring')) return '/assets/logos/ring.png';
+    if (n.includes('wyze')) return '/assets/logos/wyze.png';
+    if (n.includes('tapo') || n.includes('tp-link')) return '/assets/logos/tapo.png';
+    if (n.includes('tuya')) return '/assets/logos/tuya.png';
+    if (n.includes('ezviz')) return '/assets/logos/ezviz.png';
+    if (n.includes('hikvision')) return '/assets/logos/hikvision.png';
+    if (n.includes('reolink')) return '/assets/logos/reolink.png';
+    if (n.includes('dahua')) return '/assets/logos/dahua.png';
+    if (n.includes('google') || n.includes('nest')) return '/assets/logos/google-nest.png';
+    if (n.includes('arlo')) return '/assets/logos/arlo.png';
+    if (n.includes('vimtag')) return '/assets/logos/vimtag.png';
+    
+    // Generic fallback icon if no brand is matched
+    return '';
+}
 
 export function CameraList({ cameras, events, onDelete }: Props) {
     const [selectedId, setSelectedId]     = useState<string | null>(cameras[0]?.id ?? null);
@@ -74,8 +93,15 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                 : 'border-white/5 bg-white/[0.02] hover:bg-white/5'
                         }`}
                     >
-                        <span className="text-sm font-semibold text-white truncate w-full">{cam.name}</span>
-                        <span className="text-[10px] text-gray-500 font-mono mt-0.5">{cam.ip}</span>
+                        <div className="flex items-center gap-2 w-full mb-1">
+                            {getBrandLogo(cam.name) ? (
+                                <img src={getBrandLogo(cam.name)} alt="brand" className="w-5 h-5 object-contain opacity-90" />
+                            ) : (
+                                <span className="text-sm opacity-50">📷</span>
+                            )}
+                            <span className="text-sm font-semibold text-white truncate flex-1">{cam.name}</span>
+                        </div>
+                        <span className="text-[10px] text-gray-500 font-mono">{cam.ip}</span>
                         <span className={`mt-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full ${STATUS_COLORS[cam.status]}`}>
                             {STATUS_LABELS[cam.status]}
                         </span>
@@ -90,6 +116,11 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                     <div className="flex justify-between items-start">
                         <div>
                             <h2 className="text-2xl font-bold flex items-center gap-3">
+                                {getBrandLogo(selected.name) ? (
+                                    <img src={getBrandLogo(selected.name)} alt="brand" className="w-8 h-8 object-contain drop-shadow-md" />
+                                ) : (
+                                    <span>📷</span>
+                                )}
                                 {selected.name}
                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${STATUS_COLORS[selected.status]}`}>
                                     {STATUS_LABELS[selected.status]}
