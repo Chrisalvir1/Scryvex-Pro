@@ -18,3 +18,7 @@ ports_description:
   9090/tcp: "Liquid Glass UI Web Interface"
   4000/udp: "WebRTC HKSV Port"
   55600/tcp: "Red Matter Base Port"
+panel_icon: mdi:cctv
+panel_title: "Scryvex PRO"
+panel_admin: false
+webui: "http://[HOST]:9090"

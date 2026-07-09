@@ -9,12 +9,12 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /build
 
 # Copy all source files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml ./
 COPY server/package.json server/
 COPY sdk/package.json sdk/
 COPY frontend/package.json frontend/
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy the rest of the source code
 COPY . .
@@ -47,7 +47,7 @@ COPY --from=builder /build/server/dist ./server/dist
 COPY --from=builder /build/frontend/dist ./frontend/dist
 
 # Install only production dependencies
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod
 
 # Copy initialization script
 COPY run.sh /run.sh
