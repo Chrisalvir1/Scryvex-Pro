@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .liquid-glass {
+    @apply bg-liquidBg backdrop-blur-xl border border-liquidBorder shadow-[0_4px_30px_rgba(0,0,0,0.1)] rounded-2xl;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #0f172a; /* Deep dark background */
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+}
