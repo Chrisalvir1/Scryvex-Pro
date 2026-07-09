@@ -26,7 +26,7 @@ RUN npm install -g typescript rimraf
 WORKDIR /usr/src/app
 
 # 5. Clonar el repositorio base
-ARG CACHE_BUST=27
+ARG CACHE_BUST=28
 RUN git clone --depth 1 https://github.com/Chrisalvir1/Scryvex-Pro-V2.git .
 
 # 6. Descargas manuales de submódulos (probado localmente - NECESARIOS)
@@ -35,8 +35,8 @@ RUN rm -rf external/unifi-protect && git clone --depth 1 https://github.com/kous
 RUN rm -rf external/ring-client-api && git clone --depth 1 -b fork https://github.com/koush/ring.git external/ring-client-api
 RUN rm -rf plugins/onvif/onvif && git clone --depth 1 https://github.com/koush/onvif.git plugins/onvif/onvif
 
-# 7. Parches: borrar engines (bloquea pnpm 11) y borrar script prepublishOnly del SDK
-RUN node -e "const fs=require('fs'); let p='package.json'; let d=JSON.parse(fs.readFileSync(p)); delete d.engines; fs.writeFileSync(p,JSON.stringify(d,null,2)); p='sdk/package.json'; d=JSON.parse(fs.readFileSync(p)); delete d.scripts.prepublishOnly; fs.writeFileSync(p,JSON.stringify(d,null,2));"
+# 7. Parches: borrar engines (bloquea pnpm 11)
+RUN node -e "const fs=require('fs'); let p='package.json'; let d=JSON.parse(fs.readFileSync(p)); delete d.engines; fs.writeFileSync(p,JSON.stringify(d,null,2));"
 
 # 8. Instalar (dangerouslyAllowAllBuilds en pnpm-workspace.yaml autoriza nativos)
 RUN pnpm install --no-frozen-lockfile
