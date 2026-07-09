@@ -16,14 +16,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Habilitar pnpm v11 (version actual solicitada)
-RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
+# 2. LA MAGIA: Forzar pnpm versión 8 (Sin candados de seguridad molestos)
+RUN corepack enable && corepack prepare pnpm@8.15.9 --activate
 
 # 3. Directorio de trabajo
 WORKDIR /usr/src/app
 
 # 4. Clonar el codigo principal
-ARG CACHE_BUST=5
+ARG CACHE_BUST=6
 RUN git clone --depth 1 https://github.com/Chrisalvir1/Scryvex-Pro-V2.git .
 
 # 5. FIX DEFINITIVO: Clonar manualmente los submodulos porque Git perdio los enlaces
