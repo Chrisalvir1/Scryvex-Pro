@@ -1,9 +1,13 @@
 name: "Scryvex Pro"
-slug: "haos_addon"
+slug: "scryvex_pro_final"
 version: "1.0.0"
 description: "Zero-Latency Local-First NVR con YOLOv10 y Matter 1.6"
 arch:
   - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
 init: false
 host_network: true
 map:
