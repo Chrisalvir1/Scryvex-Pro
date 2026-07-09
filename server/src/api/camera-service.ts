@@ -18,6 +18,15 @@ export interface Camera {
     status: CameraStatus;
     codec?: string;          // e.g. "H.265", "H.264"
     config: Record<string, unknown>;  // JSONB: matter, yolo, etc.
+    
+    // HKSV Specifics
+    hksv_codecs?: string[];
+    hksv_video_tiers?: Record<string, unknown>;
+    hksv_audio_codec?: string;
+    hksv_audio_samplerate?: number;
+    hksv_capabilities?: Record<string, unknown>;
+    hksv_motion_zones?: Record<string, unknown>;
+
     created_at: Date;
     updated_at: Date;
 }
@@ -41,6 +50,14 @@ export interface CreateCameraInput {
     protocol: CameraProtocol;
     codec?: string;
     config?: Record<string, unknown>;
+
+    // HKSV Specifics
+    hksv_codecs?: string[];
+    hksv_video_tiers?: Record<string, unknown>;
+    hksv_audio_codec?: string;
+    hksv_audio_samplerate?: number;
+    hksv_capabilities?: Record<string, unknown>;
+    hksv_motion_zones?: Record<string, unknown>;
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -92,6 +109,17 @@ export class CameraService {
             ON scryvex_core.camera_events(camera_id, timestamp DESC);
         `);
 
+        // HKSV Migrations
+        await this.pool.query(`
+            ALTER TABLE scryvex_core.cameras 
+            ADD COLUMN IF NOT EXISTS hksv_codecs TEXT[] DEFAULT '{"H.264", "H.265"}',
+            ADD COLUMN IF NOT EXISTS hksv_video_tiers JSONB DEFAULT '{"High": {"TargetAverageBitrate": 1700, "Quality": 2, "Width": 1920, "Height": 1080, "FrameRate": 30}, "Medium": {"TargetAverageBitrate": 768, "Quality": 3, "Width": 1280, "Height": 720, "FrameRate": 30}, "Low": {"TargetAverageBitrate": 180, "Quality": 4, "Width": 640, "Height": 360, "FrameRate": 15}}',
+            ADD COLUMN IF NOT EXISTS hksv_audio_codec TEXT DEFAULT 'Opus',
+            ADD COLUMN IF NOT EXISTS hksv_audio_samplerate INTEGER DEFAULT 16,
+            ADD COLUMN IF NOT EXISTS hksv_capabilities JSONB DEFAULT '{}',
+            ADD COLUMN IF NOT EXISTS hksv_motion_zones JSONB DEFAULT '{}';
+        `);
+
         console.log('[CameraService] Database tables ready.');
     }
 
@@ -100,7 +128,9 @@ export class CameraService {
     async findAll(): Promise<Camera[]> {
         const res = await this.pool.query<Camera>(`
             SELECT id, name, ip, port, rtsp_url, onvif_port, username,
-                   protocol, status, codec, config, created_at, updated_at
+                   protocol, status, codec, config, 
+                   hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones,
+                   created_at, updated_at
             FROM scryvex_core.cameras
             ORDER BY created_at ASC
         `);
@@ -110,7 +140,9 @@ export class CameraService {
     async findById(id: string): Promise<Camera | undefined> {
         const res = await this.pool.query<Camera>(`
             SELECT id, name, ip, port, rtsp_url, onvif_port, username,
-                   protocol, status, codec, config, created_at, updated_at
+                   protocol, status, codec, config,
+                   hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones,
+                   created_at, updated_at
             FROM scryvex_core.cameras
             WHERE id = $1
         `, [id]);
@@ -118,13 +150,23 @@ export class CameraService {
     }
 
     async create(input: CreateCameraInput): Promise<Camera> {
+        // Apply HKSV defaults if not provided in the input
+        const defaultHksvVideoTiers = {
+            "Highest": { "TargetAverageBitrate": 4500, "Quality": 1, "Width": 3840, "Height": 2160, "FrameRate": 30 },
+            "High":    { "TargetAverageBitrate": 1700, "Quality": 2, "Width": 1920, "Height": 1080, "FrameRate": 30 },
+            "Medium":  { "TargetAverageBitrate": 768,  "Quality": 3, "Width": 1280, "Height": 720,  "FrameRate": 30 },
+            "Low":     { "TargetAverageBitrate": 180,  "Quality": 4, "Width": 640,  "Height": 360,  "FrameRate": 15 }
+        };
+
         const res = await this.pool.query<Camera>(`
             INSERT INTO scryvex_core.cameras
                 (name, ip, port, rtsp_url, onvif_port, username, password_hash,
-                 protocol, codec, config)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                 protocol, codec, config, hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             RETURNING id, name, ip, port, rtsp_url, onvif_port, username,
-                      protocol, status, codec, config, created_at, updated_at
+                      protocol, status, codec, config,
+                      hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones,
+                      created_at, updated_at
         `, [
             input.name,
             input.ip,
@@ -136,6 +178,12 @@ export class CameraService {
             input.protocol,
             input.codec      ?? null,
             JSON.stringify(input.config ?? {}),
+            input.hksv_codecs ?? ['H.264', 'H.265'],
+            JSON.stringify(input.hksv_video_tiers ?? defaultHksvVideoTiers),
+            input.hksv_audio_codec ?? 'Opus',
+            input.hksv_audio_samplerate ?? 16,
+            JSON.stringify(input.hksv_capabilities ?? {}),
+            JSON.stringify(input.hksv_motion_zones ?? {})
         ]);
         return res.rows[0]!;
     }

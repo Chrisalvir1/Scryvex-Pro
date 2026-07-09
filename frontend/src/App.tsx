@@ -79,8 +79,8 @@ export default function App() {
                     </div>
                 )}
 
-                {/* Error state — server unreachable */}
-                {!loading && error && (
+                {/* Error state — server unreachable, but only block UI if we already have cameras to show, otherwise fallback to empty state */}
+                {!loading && error && cameras.length > 0 && (
                     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
                         <span className="text-4xl">⚠️</span>
                         <div>
@@ -94,7 +94,7 @@ export default function App() {
                 )}
 
                 {/* Normal state — camera list or empty state */}
-                {!loading && !error && (
+                {!loading && (!error || cameras.length === 0) && (
                     <CameraList
                         cameras={cameras}
                         events={recentEvents}

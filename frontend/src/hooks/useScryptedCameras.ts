@@ -32,8 +32,12 @@ export function useScryptedCameras(): UseCamerasReturn {
 
     // ── REST: fetch full camera list ──────────────────────────────────────────
     const fetchCameras = useCallback(async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
         try {
-            const res = await fetch(API_BASE);
+            const res = await fetch(API_BASE, { signal: controller.signal });
+            clearTimeout(timeoutId);
             if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
             const data = await res.json() as { cameras: Camera[] };
             if (isMounted.current) {
@@ -41,8 +45,15 @@ export function useScryptedCameras(): UseCamerasReturn {
                 setError(null);
             }
         } catch (err: unknown) {
+            clearTimeout(timeoutId);
             const msg = err instanceof Error ? err.message : String(err);
-            if (isMounted.current) setError(msg);
+            if (isMounted.current) {
+                if (msg.includes('aborted') || msg.includes('timeout')) {
+                    setError('Timeout al conectar con el servidor (5s).');
+                } else {
+                    setError(msg);
+                }
+            }
         } finally {
             if (isMounted.current) setLoading(false);
         }
