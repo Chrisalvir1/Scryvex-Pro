@@ -19,7 +19,7 @@ const STATUS_LABELS: Record<Camera['status'], string> = {
     unknown: 'DESCONOCIDO',
 };
 
-type ActiveTab = 'preview' | 'logs' | 'info';
+type ActiveTab = 'preview' | 'logs' | 'info' | 'matter';
 
 export function CameraList({ cameras, events, onDelete }: Props) {
     const [selectedId, setSelectedId]     = useState<string | null>(cameras[0]?.id ?? null);
@@ -117,7 +117,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
 
                     {/* Tabs */}
                     <div className="flex gap-1 border-b border-white/10">
-                        {(['preview', 'logs', 'info'] as ActiveTab[]).map(t => (
+                        {(['preview', 'logs', 'info', 'matter'] as ActiveTab[]).map(t => (
                             <button
                                 key={t}
                                 onClick={() => setActiveTab(t)}
@@ -127,7 +127,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                         : 'border-transparent text-gray-500 hover:text-gray-300'
                                 }`}
                             >
-                                {t === 'preview' ? 'Preview' : t === 'logs' ? 'Logs' : 'Info'}
+                                {t === 'preview' ? 'Preview' : t === 'logs' ? 'Logs' : t === 'info' ? 'Info' : 'Matter'}
                             </button>
                         ))}
                     </div>
@@ -197,6 +197,49 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                     <p className="text-sm text-white font-mono truncate mt-0.5">{v}</p>
                                 </div>
                             ))}
+                        </div>
+                    )}
+
+                    {/* Matter tab */}
+                    {activeTab === 'matter' && (
+                        <div className="flex flex-col py-6 px-4 border border-white/5 bg-black/40 rounded-xl">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-blue-500/20 rounded-lg border border-blue-500/30">
+                                    <span className="text-xl">🌐</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white">Configuración Matter</h3>
+                                    <p className="text-xs text-gray-400">
+                                        Expuesta dinámicamente al Fabric a través de Matterbridge.
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-2">
+                                <div className="bg-white/[0.03] border border-white/5 rounded-lg px-4 py-3">
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Vendor ID (VID)</p>
+                                    <p className="text-lg font-mono text-blue-400 font-bold">
+                                        0x{Number(selected.matter_vendor_id ?? 4939).toString(16).toUpperCase()}
+                                    </p>
+                                </div>
+                                <div className="bg-white/[0.03] border border-white/5 rounded-lg px-4 py-3">
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Product ID (PID)</p>
+                                    <p className="text-lg font-mono text-emerald-400 font-bold">
+                                        0x{Number(selected.matter_product_id ?? 2049).toString(16).toUpperCase()}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 bg-white/[0.03] border border-white/5 rounded-lg px-4 py-3">
+                                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Nombre en el Fabric</p>
+                                <p className="text-sm font-medium text-white">
+                                    {selected.matter_device_name || selected.name}
+                                </p>
+                            </div>
+                            
+                            <p className="mt-6 text-[10px] text-gray-600 text-center italic">
+                                El emparejamiento maestro de la red Matter se gestiona desde el panel principal de Matterbridge.
+                            </p>
                         </div>
                     )}
                 </div>

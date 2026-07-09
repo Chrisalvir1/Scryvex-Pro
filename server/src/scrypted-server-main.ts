@@ -162,6 +162,7 @@ async function start(mainFilename: string, options?: {
     const cameraService = new CameraService(pgPool);
     try {
         await cameraService.migrate();
+        // Matter initialization will happen separately
     } catch (err: any) {
         console.error('[CameraService] Migration failed (PostgreSQL may not be ready):', err.message);
     }

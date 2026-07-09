@@ -1,9 +1,8 @@
 import { Pool } from 'pg';
+import { CameraStatus, CameraEvent, CreateCameraInput, CameraProtocol } from '../../../frontend/src/types/camera';
+export { CameraStatus, CameraEvent, CreateCameraInput, CameraProtocol };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export type CameraProtocol = 'RTSP' | 'ONVIF';
-export type CameraStatus   = 'online' | 'offline' | 'unknown';
 
 export interface Camera {
     id: string;          // UUID
@@ -27,37 +26,13 @@ export interface Camera {
     hksv_capabilities?: Record<string, unknown>;
     hksv_motion_zones?: Record<string, unknown>;
 
+    // Matter Configuration
+    matter_vendor_id?: number;
+    matter_product_id?: number;
+    matter_device_name?: string;
+
     created_at: Date;
     updated_at: Date;
-}
-
-export interface CameraEvent {
-    id: string;
-    camera_id: string;
-    event_type: 'motion' | 'person' | 'car' | 'animal' | 'online' | 'offline' | 'error';
-    timestamp: Date;
-    metadata: Record<string, unknown>;  // JSONB: yolo confidence, bbox coords, etc.
-}
-
-export interface CreateCameraInput {
-    name: string;
-    ip: string;
-    port: number;
-    rtsp_url?: string;
-    onvif_port?: number;
-    username?: string;
-    password?: string;        // raw, will be stored as-is (encrypt before saving in prod)
-    protocol: CameraProtocol;
-    codec?: string;
-    config?: Record<string, unknown>;
-
-    // HKSV Specifics
-    hksv_codecs?: string[];
-    hksv_video_tiers?: Record<string, unknown>;
-    hksv_audio_codec?: string;
-    hksv_audio_samplerate?: number;
-    hksv_capabilities?: Record<string, unknown>;
-    hksv_motion_zones?: Record<string, unknown>;
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -117,7 +92,14 @@ export class CameraService {
             ADD COLUMN IF NOT EXISTS hksv_audio_codec TEXT DEFAULT 'Opus',
             ADD COLUMN IF NOT EXISTS hksv_audio_samplerate INTEGER DEFAULT 16,
             ADD COLUMN IF NOT EXISTS hksv_capabilities JSONB DEFAULT '{}',
-            ADD COLUMN IF NOT EXISTS hksv_motion_zones JSONB DEFAULT '{}';
+            ADD COLUMN IF NOT EXISTS hksv_motion_zones JSONB DEFAULT '{}',
+            ADD COLUMN IF NOT EXISTS matter_vendor_id INTEGER DEFAULT 4939,
+            ADD COLUMN IF NOT EXISTS matter_product_id INTEGER DEFAULT 2049,
+            ADD COLUMN IF NOT EXISTS matter_device_name TEXT;
+
+        -- Remove old HAP columns if they exist (Migration to Matter)
+        ALTER TABLE scryvex_core.cameras DROP COLUMN IF EXISTS hap_setup_uri;
+        ALTER TABLE scryvex_core.cameras DROP COLUMN IF EXISTS hap_pincode;
         `);
 
         console.log('[CameraService] Database tables ready.');
@@ -130,6 +112,7 @@ export class CameraService {
             SELECT id, name, ip, port, rtsp_url, onvif_port, username,
                    protocol, status, codec, config, 
                    hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones,
+                   matter_vendor_id, matter_product_id, matter_device_name,
                    created_at, updated_at
             FROM scryvex_core.cameras
             ORDER BY created_at ASC
@@ -142,6 +125,7 @@ export class CameraService {
             SELECT id, name, ip, port, rtsp_url, onvif_port, username,
                    protocol, status, codec, config,
                    hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones,
+                   matter_vendor_id, matter_product_id, matter_device_name,
                    created_at, updated_at
             FROM scryvex_core.cameras
             WHERE id = $1
@@ -161,11 +145,13 @@ export class CameraService {
         const res = await this.pool.query<Camera>(`
             INSERT INTO scryvex_core.cameras
                 (name, ip, port, rtsp_url, onvif_port, username, password_hash,
-                 protocol, codec, config, hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                 protocol, codec, config, hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones,
+                 matter_vendor_id, matter_product_id, matter_device_name)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING id, name, ip, port, rtsp_url, onvif_port, username,
                       protocol, status, codec, config,
                       hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones,
+                      matter_vendor_id, matter_product_id, matter_device_name,
                       created_at, updated_at
         `, [
             input.name,
@@ -183,8 +169,12 @@ export class CameraService {
             input.hksv_audio_codec ?? 'Opus',
             input.hksv_audio_samplerate ?? 16,
             JSON.stringify(input.hksv_capabilities ?? {}),
-            JSON.stringify(input.hksv_motion_zones ?? {})
+            JSON.stringify(input.hksv_motion_zones ?? {}),
+            input.matter_vendor_id ?? 4939,
+            input.matter_product_id ?? 2049,
+            input.matter_device_name ?? input.name
         ]);
+        
         return res.rows[0]!;
     }
 

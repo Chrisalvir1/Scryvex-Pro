@@ -81,6 +81,44 @@ export function createCamerasRouter(cameraService: CameraService): Router {
             res.status(500).json({ error: 'Failed to delete camera', detail: err.message });
         }
     });
+    // GET /api/cameras/matter/devices — dedicated endpoint for Matterbridge to consume
+    router.get('/matter/devices', async (req: Request, res: Response) => {
+        try {
+            const cameras = await cameraService.findAll();
+            
+            // Format cameras strictly matching the Matter object model
+            const matterDevices = cameras.map(cam => ({
+                id: cam.id,
+                deviceType: 'VideoCamera',
+                name: cam.matter_device_name || cam.name,
+                vendorId: cam.matter_vendor_id || 4939,
+                productId: cam.matter_product_id || 2049,
+                endpoints: {
+                    video: {
+                        codecs: cam.hksv_codecs || ['H264'],
+                        resolutions: cam.hksv_video_tiers || {},
+                        rtsp_url: cam.rtsp_url
+                    },
+                    audio: {
+                        codec: cam.hksv_audio_codec || 'Opus',
+                        samplerate: cam.hksv_audio_samplerate || 16
+                    },
+                    networking: {
+                        ipv4Address: cam.ip,
+                        port: cam.port,
+                        forceIpv4: true // Ensures Matter handles Ethernet or Wi-Fi identically via IPv4
+                    }
+                },
+                capabilities: cam.hksv_capabilities || {},
+                status: cam.status
+            }));
+
+            res.json({ devices: matterDevices });
+        } catch (err: any) {
+            console.error('[cameras-router] GET /api/cameras/matter/devices error:', err.message);
+            res.status(500).json({ error: 'Failed to fetch Matter devices' });
+        }
+    });
 
     return router;
 }

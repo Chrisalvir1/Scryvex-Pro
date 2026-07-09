@@ -24,6 +24,10 @@ export interface Camera {
     hksv_audio_samplerate?: number;
     hksv_capabilities?: Record<string, unknown>;
     hksv_motion_zones?: Record<string, unknown>;
+    // Matter Configuration
+    matter_vendor_id?: number;
+    matter_product_id?: number;
+    matter_device_name?: string;
 
     created_at: string;  // ISO string from JSON
     updated_at: string;
@@ -47,6 +51,7 @@ export interface CreateCameraInput {
     password?: string;
     protocol: CameraProtocol;
     codec?: string;
+    config?: Record<string, unknown>;
     
     // HKSV Specifics
     hksv_codecs?: string[];
@@ -55,6 +60,11 @@ export interface CreateCameraInput {
     hksv_audio_samplerate?: number;
     hksv_capabilities?: Record<string, unknown>;
     hksv_motion_zones?: Record<string, unknown>;
+
+    // Matter Configuration
+    matter_vendor_id?: number;
+    matter_product_id?: number;
+    matter_device_name?: string;
 }
 
 // WebSocket event types
