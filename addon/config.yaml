@@ -1,5 +1,5 @@
 name: "Scryvex Pro V2"
-version: "2.1.6"
+version: "2.1.7"
 slug: "scryvex_pro_final"
 description: "Zero-Latency Local-First NVR con YOLOv10 y Matter 1.6"
 url: "https://github.com/Chrisalvir1/Scryvex-Pro-V2"
@@ -11,7 +11,7 @@ arch:
   - i386
 init: false
 ingress: true
-ingress_port: 9090
+ingress_port: 19090
 panel_icon: mdi:cctv
 hassio_api: true
 homeassistant_api: true
