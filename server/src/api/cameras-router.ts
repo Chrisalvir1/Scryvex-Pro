@@ -199,41 +199,18 @@ export function createCamerasRouter(
     router.get('/:id/preview/frame.jpg', async (req, res) => {
         try {
             await cameraService.recordLog(String(req.params.id), 'camera.preview.requested', { type: 'frame' });
-            const streamUrl = await streamController.getStreamUrl(String(req.params.id));
-            await cameraService.recordLog(String(req.params.id), 'camera.preview.url_resolved', { transport: 'tcp' });
             
-            const ffmpeg = spawn('ffmpeg', [
-                '-hide_banner', '-loglevel', 'error',
-                '-rtsp_flags', 'prefer_tcp',
-                '-timeout', '5000000', // 5s timeout
-                '-i', streamUrl,
-                '-frames:v', '1',
-                '-q:v', '2',
-                '-f', 'image2pipe',
-                '-vcodec', 'mjpeg',
-                'pipe:1'
-            ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-            await cameraService.recordLog(String(req.params.id), 'camera.preview.process_started');
-
-            let stderr = '';
-            let frameBuffer = Buffer.alloc(0);
-
-            ffmpeg.stderr.on('data', chunk => { stderr += chunk.toString(); });
-            ffmpeg.stdout.on('data', chunk => { frameBuffer = Buffer.concat([frameBuffer, chunk]); });
-
-            ffmpeg.once('close', code => {
-                if (code === 0 && frameBuffer.length > 2 && frameBuffer[0] === 0xff && frameBuffer[1] === 0xd8) {
-                    res.setHeader('Content-Type', 'image/jpeg');
-                    res.setHeader('Cache-Control', 'no-store, no-cache');
-                    res.send(frameBuffer);
-                    void cameraService.recordLog(String(req.params.id), 'camera.preview.frame.succeeded');
-                } else {
-                    const message = redactCameraSecrets(stderr.trim());
-                    res.status(502).json({ error: `No se pudo obtener el fotograma. Exit code: ${code}`, details: message });
-                    void cameraService.recordLog(String(req.params.id), 'camera.preview.frame.failed', { exitCode: code, message });
-                }
-            });
+            // This is a stub for the unified service injection
+            const previewService = (req.app.locals.previewService as import('../../media/preview-service').PreviewService);
+            if (!previewService) throw new Error('PreviewService no inyectado');
+            
+            const frameBuffer = await previewService.getFrame(String(req.params.id), 'primary');
+            
+            res.setHeader('Content-Type', 'image/jpeg');
+            res.setHeader('Cache-Control', 'no-store, no-cache');
+            res.send(frameBuffer);
+            
+            void cameraService.recordLog(String(req.params.id), 'camera.preview.frame.succeeded');
         } catch (error) {
             res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
         }
@@ -242,34 +219,6 @@ export function createCamerasRouter(
     router.get('/:id/preview.mjpeg', async (req, res) => {
         try {
             await cameraService.recordLog(String(req.params.id), 'camera.preview.requested', { type: 'mjpeg' });
-            const streamUrl = await streamController.getStreamUrl(String(req.params.id));
-            await cameraService.recordLog(String(req.params.id), 'camera.preview.url_resolved');
-            
-            const boundary = 'scryvexframe';
-            res.status(200);
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Connection', 'keep-alive');
-            res.setHeader('X-Accel-Buffering', 'no');
-            res.setHeader('Content-Type', `multipart/x-mixed-replace; boundary=${boundary}`);
-            
-            const ffmpeg = spawn('ffmpeg', [
-                '-hide_banner', '-loglevel', 'error',
-                '-rtsp_flags', 'prefer_tcp',
-                '-timeout', '5000000',
-                '-fflags', '+discardcorrupt',
-                '-i', streamUrl,
-                '-an',
-                '-vf', 'fps=8',
-                '-q:v', '5',
-                '-f', 'mpjpeg',
-                '-boundary_tag', boundary,
-                'pipe:1'
-            ], { stdio: ['ignore', 'pipe', 'pipe'] });
-            
-            await cameraService.recordLog(String(req.params.id), 'camera.preview.process_started');
-            
-            let stderr = '';
             let firstFrameValid = false;
             let bytesWritten = 0;
             const startTime = Date.now();

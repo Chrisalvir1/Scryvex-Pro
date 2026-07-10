@@ -332,19 +332,28 @@ export class SystemDiagnosticsService {
                         
                         try {
                             await this.runCommandStr(newState.ffmpeg.path!, [
-                                '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', '1', '-c:a', 'libopus', testOut
+                                '-hide_banner', '-loglevel', 'error', '-y', 
+                                '-f', 'lavfi', '-i', 'anullsrc=r=16000:cl=mono', 
+                                '-t', '1', 
+                                '-c:a', 'libopus', 
+                                '-ar', '48000', 
+                                '-ac', '1',
+                                '-frame_duration', '20',
+                                testOut
                             ]);
 
                             if (newState.ffprobe.usable && newState.ffprobe.path) {
                                 const probeOut = await this.runCommandStr(newState.ffprobe.path, ['-v', 'error', '-show_streams', '-of', 'json', testOut]);
                                 const probeJson = JSON.parse(probeOut);
-                                if (probeJson.streams && probeJson.streams[0].codec_name === 'opus') {
+                                const stream = probeJson.streams?.[0];
+                                if (stream && stream.codec_name === 'opus' && String(stream.sample_rate) === '48000' && stream.channels === 1) {
                                     newState.functionalTests.opusEncoding.success = true;
                                 } else {
-                                    newState.functionalTests.opusEncoding.reason = 'FFprobe returned not opus';
+                                    newState.functionalTests.opusEncoding.reason = 'FFprobe returned invalid opus, sample rate, or channels';
                                 }
                             } else {
-                                newState.functionalTests.opusEncoding.success = true; // Assumed success if it didn't throw
+                                newState.functionalTests.opusEncoding.success = false;
+                                newState.functionalTests.opusEncoding.reason = 'not_verified (ffprobe missing)';
                             }
                         } finally {
                             await fs.unlink(testOut).catch(() => undefined);
@@ -360,25 +369,42 @@ export class SystemDiagnosticsService {
                 if (newState.videoCodecs.h264.encoder && newState.videoCodecs.h264.parser && newState.videoCodecs.h264.bitstreamFilter) {
                     newState.functionalTests.h264LocalRemux = { supported: true, success: false };
                     const testIn = join(tmpdir(), `remux-in-${process.pid}-${randomUUID()}.mp4`);
-                    const testOut = join(tmpdir(), `remux-out-${process.pid}-${randomUUID()}.mp4`);
+                    const testOutMp4 = join(tmpdir(), `remux-out-${process.pid}-${randomUUID()}.mp4`);
+                    const testOutTs = join(tmpdir(), `remux-out-${process.pid}-${randomUUID()}.ts`);
                     
                     try {
-                        // Generate a dummy 1-sec H.264 file
+                        // Generación del fixture
                         await this.runCommandStr(newState.ffmpeg.path!, [
                             '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x240:d=1', '-c:v', 'libx264', testIn
                         ]);
-                        // Try to remux it using -c:v copy
+                        
+                        // Remux MP4 a MP4 (sin AnnexB)
                         await this.runCommandStr(newState.ffmpeg.path!, [
-                            '-hide_banner', '-loglevel', 'error', '-y', '-i', testIn, '-c:v', 'copy', '-bsf:v', 'h264_mp4toannexb', testOut
+                            '-hide_banner', '-loglevel', 'error', '-y', '-i', testIn, '-c:v', 'copy', testOutMp4
                         ]);
+
+                        // Remux MP4 a MPEG-TS (con AnnexB)
+                        await this.runCommandStr(newState.ffmpeg.path!, [
+                            '-hide_banner', '-loglevel', 'error', '-y', '-i', testIn, '-c:v', 'copy', '-bsf:v', 'h264_mp4toannexb', testOutTs
+                        ]);
+
                         newState.functionalTests.h264LocalRemux.success = true;
-                        newState.functionalTests.h264LocalRemux.details = { in: 'mp4', out: 'mp4', codec: 'h264', args: '-c:v copy -bsf:v h264_mp4toannexb' };
+                        newState.functionalTests.h264LocalRemux.details = { 
+                            in: 'mp4', 
+                            outMp4: 'mp4', 
+                            outTs: 'ts',
+                            codec: 'h264', 
+                            filterRequiredForTs: true,
+                            filterUsedForTs: 'h264_mp4toannexb',
+                            videoOperation: 'copy' 
+                        };
                     } catch (e: any) {
                         newState.functionalTests.h264LocalRemux.reason = e.message;
                         newState.errors.push({ test: 'h264LocalRemux', error: this.systemService?.sanitizeMediaDiagnosticMessage(e.message) ?? e.message });
                     } finally {
                         await fs.unlink(testIn).catch(() => undefined);
-                        await fs.unlink(testOut).catch(() => undefined);
+                        await fs.unlink(testOutMp4).catch(() => undefined);
+                        await fs.unlink(testOutTs).catch(() => undefined);
                     }
                 } else {
                     newState.functionalTests.h264LocalRemux = { supported: false, success: false, reason: 'Missing encoder, parser or BSF for generating test file.' };
@@ -388,23 +414,42 @@ export class SystemDiagnosticsService {
                 if (newState.videoCodecs.h265.encoder && newState.videoCodecs.h265.parser && newState.videoCodecs.h265.bitstreamFilter) {
                     newState.functionalTests.h265LocalRemux = { supported: true, success: false };
                     const testIn = join(tmpdir(), `remux-in-hevc-${process.pid}-${randomUUID()}.mp4`);
-                    const testOut = join(tmpdir(), `remux-out-hevc-${process.pid}-${randomUUID()}.mp4`);
+                    const testOutMp4 = join(tmpdir(), `remux-out-hevc-${process.pid}-${randomUUID()}.mp4`);
+                    const testOutTs = join(tmpdir(), `remux-out-hevc-${process.pid}-${randomUUID()}.ts`);
                     
                     try {
+                        // Generación de fixture
                         await this.runCommandStr(newState.ffmpeg.path!, [
                             '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=320x240:d=1', '-c:v', 'libx265', testIn
                         ]);
+                        
+                        // MP4 a MP4 (sin AnnexB)
                         await this.runCommandStr(newState.ffmpeg.path!, [
-                            '-hide_banner', '-loglevel', 'error', '-y', '-i', testIn, '-c:v', 'copy', '-bsf:v', 'hevc_mp4toannexb', testOut
+                            '-hide_banner', '-loglevel', 'error', '-y', '-i', testIn, '-c:v', 'copy', testOutMp4
                         ]);
+
+                        // MP4 a MPEG-TS (con AnnexB)
+                        await this.runCommandStr(newState.ffmpeg.path!, [
+                            '-hide_banner', '-loglevel', 'error', '-y', '-i', testIn, '-c:v', 'copy', '-bsf:v', 'hevc_mp4toannexb', testOutTs
+                        ]);
+
                         newState.functionalTests.h265LocalRemux.success = true;
-                        newState.functionalTests.h265LocalRemux.details = { in: 'mp4', out: 'mp4', codec: 'h265', args: '-c:v copy -bsf:v hevc_mp4toannexb' };
+                        newState.functionalTests.h265LocalRemux.details = { 
+                            in: 'mp4', 
+                            outMp4: 'mp4', 
+                            outTs: 'ts',
+                            codec: 'h265', 
+                            filterRequiredForTs: true,
+                            filterUsedForTs: 'hevc_mp4toannexb',
+                            videoOperation: 'copy' 
+                        };
                     } catch (e: any) {
                         newState.functionalTests.h265LocalRemux.reason = e.message;
                         newState.errors.push({ test: 'h265LocalRemux', error: this.systemService?.sanitizeMediaDiagnosticMessage(e.message) ?? e.message });
                     } finally {
                         await fs.unlink(testIn).catch(() => undefined);
-                        await fs.unlink(testOut).catch(() => undefined);
+                        await fs.unlink(testOutMp4).catch(() => undefined);
+                        await fs.unlink(testOutTs).catch(() => undefined);
                     }
                 } else {
                     newState.functionalTests.h265LocalRemux = { supported: false, success: false, reason: 'Missing HEVC encoder, parser or BSF for generating test file.' };

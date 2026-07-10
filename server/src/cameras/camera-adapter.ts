@@ -33,26 +33,8 @@ export type ProfileValidationStatus =
     | 'transport_failed'
     | 'not_tested';
 
-/** Structured evidence for a single camera capability. */
-export interface CapabilityEvidence {
-    entity:
-        | 'video' | 'stream_audio' | 'microphone' | 'speaker' | 'talkback'
-        | 'light' | 'siren' | 'ptz' | 'motion' | 'person' | 'vehicle'
-        | 'package' | 'doorbell' | 'battery' | 'temperature' | 'relay' | 'digital_input';
-    detected: boolean;
-    verified: boolean;
-    readable: boolean;
-    controllable: boolean;
-    source:
-        | 'rtsp' | 'onvif-device' | 'onvif-media' | 'onvif-media2' | 'onvif-deviceio'
-        | 'onvif-imaging' | 'onvif-events' | 'onvif-analytics' | 'vendor-local-api'
-        | 'vendor-cloud-api' | 'home-assistant' | 'user-mapped';
-    confidence: 'verified' | 'anunciado' | 'inferido' | 'desconocido';
-    operation?: string;
-    evidence?: Record<string, unknown>;
-    lastVerifiedAt?: string;
-    error?: { category: string; message: string };
-}
+import type { CapabilityEvidence } from '../capabilities/capability-evidence';
+export type { CapabilityEvidence };
 
 export interface CameraConnectionInput {
     id?: string;

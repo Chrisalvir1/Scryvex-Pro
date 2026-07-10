@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { RawStreamInfo, normalizeCodec, ProfileValidationStatus, RtspErrorCategory, classifyRtspError } from '../cameras/camera-adapter';
+import { ResolvedMediaInput } from './media-resolvers';
 
 export interface ProbeResult {
     success: boolean;
@@ -8,25 +9,24 @@ export interface ProbeResult {
     errorCategory?: RtspErrorCategory;
     stderrSummary?: string;
     rawInfo?: RawStreamInfo;
-    transportUsed?: 'tcp' | 'udp';
 }
 
-function runFfprobe(url: string, transport: 'tcp' | 'udp', timeoutMs: number = 10000): Promise<{ stdout: string, stderr: string, exitCode: number | null, durationMs: number }> {
+function runFfprobe(input: ResolvedMediaInput, timeoutMs: number = 10000, signal?: AbortSignal): Promise<{ stdout: string, stderr: string, exitCode: number | null, durationMs: number }> {
     return new Promise((resolve) => {
         const start = Date.now();
-        const transportFlag = transport === 'tcp' ? 'tcp' : 'udp';
         
-        const child = spawn('ffprobe', [
+        const args = [
             '-v', 'error',
-            '-rtsp_transport', transportFlag,
             '-rw_timeout', (timeoutMs * 1000).toString(),
             '-analyzeduration', '5000000',
             '-probesize', '5000000',
             '-show_streams',
             '-show_format',
             '-of', 'json',
-            url
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+            ...input.ffmpegInputArguments
+        ];
+
+        const child = spawn('ffprobe', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
         let stdout = '';
         let stderr = '';
@@ -59,6 +59,19 @@ function runFfprobe(url: string, transport: 'tcp' | 'udp', timeoutMs: number = 1
                 durationMs: Date.now() - start
             });
         });
+
+        if (signal) {
+            signal.addEventListener('abort', () => {
+                clearTimeout(timer);
+                child.kill('SIGKILL');
+                resolve({
+                    stdout: '',
+                    stderr: 'Aborted',
+                    exitCode: null,
+                    durationMs: Date.now() - start
+                });
+            });
+        }
     });
 }
 
@@ -73,33 +86,18 @@ function parseFraction(val?: string): number | undefined {
     return Number(val) || undefined;
 }
 
-export async function probeMediaStream(url: string, timeoutMs: number = 10000): Promise<ProbeResult> {
-    // Attempt TCP first
-    let result = await runFfprobe(url, 'tcp', timeoutMs);
-    let transport: 'tcp' | 'udp' = 'tcp';
-
-    // Fallback to UDP if TCP explicitly fails due to transport unsupported or connection timeout 
-    // without returning valid streams (some older ONVIF cameras only speak UDP).
-    if (result.exitCode !== 0) {
-        const category = classifyRtspError(result.stderr, result.exitCode);
-        if (category === 'rtsp_461_transport_unsupported' || category === 'connection_timeout') {
-            const udpResult = await runFfprobe(url, 'udp', timeoutMs);
-            if (udpResult.exitCode === 0 || udpResult.stdout.includes('streams')) {
-                result = udpResult;
-                transport = 'udp';
-            }
-        }
-    }
+export async function probeMediaStream(input: ResolvedMediaInput, timeoutMs: number = 10000, signal?: AbortSignal): Promise<ProbeResult> {
+    const result = await runFfprobe(input, timeoutMs, signal);
 
     const probeResult: ProbeResult = {
         success: result.exitCode === 0,
         durationMs: result.durationMs,
         exitCode: result.exitCode,
-        transportUsed: transport,
     };
 
     if (result.exitCode !== 0) {
         probeResult.errorCategory = classifyRtspError(result.stderr, result.exitCode);
+        if (result.stderr === 'Aborted') probeResult.errorCategory = 'cancelled' as any;
         probeResult.stderrSummary = result.stderr.substring(0, 500).replace(/\n/g, ' ').trim() || 'Unknown error';
     }
 
@@ -117,7 +115,7 @@ export async function probeMediaStream(url: string, timeoutMs: number = 10000): 
             }
 
             const rawInfo: RawStreamInfo = {
-                transport,
+                transport: input.kind as any,
                 hasVideo: !!vStream,
                 hasAudio: !!aStream
             };
