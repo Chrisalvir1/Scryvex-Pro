@@ -224,6 +224,28 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
         }
     };
 
+    const handleExecuteAction = async (action: 'light' | 'siren', currentState: boolean) => {
+        if (!selectedId) return;
+        const newState = !currentState;
+        
+        if (action === 'light') setLightActive(newState);
+        if (action === 'siren') setSirenActive(newState);
+
+        try {
+            const response = await fetch(apiUrl(`api/cameras/${selectedId}/actions/${action}`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: newState })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error ?? 'Error ejecutando acción');
+        } catch (error) {
+            alert(`Error al enviar el comando a la cámara: ${error instanceof Error ? error.message : String(error)}`);
+            if (action === 'light') setLightActive(currentState);
+            if (action === 'siren') setSirenActive(currentState);
+        }
+    };
+
     const selected = cameras.find(c => c.id === selectedId) ?? null;
     const capabilities = selected?.capabilities;
 
@@ -432,13 +454,13 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                                     🎤 Mic
                                                 </button>}
                                                 {capabilities?.controls.lightControl && <button
-                                                    onClick={() => setLightActive(!lightActive)}
+                                                    onClick={() => handleExecuteAction('light', lightActive)}
                                                     className={`px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${lightActive ? 'bg-yellow-400/20 text-yellow-400 border border-yellow-400/30' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
                                                 >
                                                     💡 Luz
                                                 </button>}
                                                 {capabilities?.controls.sirenControl && <button
-                                                    onClick={() => setSirenActive(!sirenActive)}
+                                                    onClick={() => handleExecuteAction('siren', sirenActive)}
                                                     className={`px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${sirenActive ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
                                                 >
                                                     🚨 Sirena

@@ -58,6 +58,7 @@ export interface CameraAdapter {
     discover(input: CameraConnectionInput): Promise<CameraDiscoveryResult>;
     getCapabilities(input: CameraConnectionInput): Promise<CameraCapabilities>;
     getSnapshot?(input: CameraConnectionInput): Promise<Buffer>;
+    executeAction?(input: CameraConnectionInput, action: 'light' | 'siren', state: boolean): Promise<void>;
     getStreamProfiles?(input: CameraConnectionInput): Promise<StreamProfile[]>;
     testConnection(input: CameraConnectionInput): Promise<ConnectionTestResult>;
     startPreview?(input: CameraConnectionInput): Promise<PreviewSession>;

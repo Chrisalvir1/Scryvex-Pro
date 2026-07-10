@@ -183,4 +183,37 @@ export class OnvifAdapter implements CameraAdapter {
         try { const result = await this.discover(input); return { success: true, status: result.capabilities.discoveryStatus }; }
         catch (error) { return { success: false, status: (error as { capabilities?: CameraCapabilities }).capabilities?.discoveryStatus ?? 'error', message: error instanceof Error ? error.message : String(error) }; }
     }
+
+    async executeAction(input: CameraConnectionInput, action: 'light' | 'siren', state: boolean): Promise<void> {
+        const onvif = await import('onvif');
+        const candidates = [...new Set([input.onvif_port ?? input.port, 80, 8080, 8899, 8000, 8001].filter(Boolean))];
+        let cam: any;
+        for (const port of candidates) {
+            try {
+                cam = await new Promise<any>((resolve, reject) => {
+                    const instance = new (onvif as any).Cam({ hostname: input.ip, port: port, username: input.username, password: input.password }, (err: Error) => err ? reject(err) : resolve(instance));
+                });
+                break;
+            } catch (e) { /* ignore */ }
+        }
+        if (!cam) throw new Error('No se pudo conectar a la cámara vía ONVIF para ejecutar la acción');
+
+        let relays: any[] = [];
+        try { relays = await call<any[]>(callback => cam.getRelayOutputs(callback)); } catch (e) { /* ignore */ }
+
+        if (relays.length > 0) {
+            let successCount = 0;
+            for (const relay of relays) {
+                const token = relay.token || relay.$.token;
+                const logicalState = state ? 'active' : 'inactive';
+                try {
+                    await call<void>(callback => cam.setRelayOutputState({ RelayOutputToken: token, LogicalState: logicalState }, callback));
+                    successCount++;
+                } catch (e) { /* ignore */ }
+            }
+            if (successCount === 0) throw new Error('Se encontraron relevadores pero ninguno aceptó el comando');
+        } else {
+            throw new Error(`La cámara no expone relevadores (RelayOutputs) vía ONVIF para encender/apagar la ${action === 'light' ? 'luz' : 'sirena'}.`);
+        }
+    }
 }

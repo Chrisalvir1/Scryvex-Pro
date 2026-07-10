@@ -148,6 +148,37 @@ export function createCamerasRouter(
         }
     });
 
+    // ── Actions ────────────────────────────────────────────────────────────────
+    router.post('/:id/actions/:actionType', async (req, res) => {
+        try {
+            const camera = await cameraService.findById(String(req.params.id));
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+            
+            const actionType = req.params.actionType as 'light' | 'siren';
+            const state = Boolean(req.body.state);
+            
+            let adapter: import('../cameras/camera-adapter').CameraAdapter;
+            if (camera.protocol === 'ONVIF') adapter = new OnvifAdapter();
+            else if (camera.protocol === 'OTHER') {
+                const { CloudIntegrationAdapter } = await import('../cameras/adapters/cloud-integration-adapter.js');
+                adapter = new CloudIntegrationAdapter();
+            }
+            else throw new Error(`Acciones no soportadas nativamente en el protocolo ${camera.protocol}. Usa integración por Plugin si aplica.`);
+            
+            if (!adapter.executeAction) throw new Error('El adaptador no soporta ejecución de acciones');
+            
+            const connection = await cameraService.getConnectionInput(camera.id);
+            if (!connection) throw new Error('No se encontraron credenciales para la cámara');
+
+            await adapter.executeAction(connection, actionType, state);
+            
+            res.json({ success: true, state });
+        } catch (err: any) {
+            console.error('[cameras-router] execute action error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // ── Stream Controls ────────────────────────────────────────────────────────
 
     router.post('/:id/stream/start', async (req, res) => {
