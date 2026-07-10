@@ -187,6 +187,8 @@ export function AddCameraModal({ onClose, onAdd }: Props) {
     const [onvifPort, setOnvifPort] = useState('8000');
     const [onvifUser, setOnvifUser] = useState('admin');
     const [onvifPass, setOnvifPass] = useState('');
+    const [portTestLoading, setPortTestLoading] = useState(false);
+    const [portTestResult, setPortTestResult] = useState<{ detectedPort?: number; message: string; results: Array<{ port: number; tcpReachable: boolean; onvif: boolean; message?: string }> } | null>(null);
 
     const handleSave = async () => {
         setSaveError(null);
@@ -258,6 +260,18 @@ export function AddCameraModal({ onClose, onAdd }: Props) {
 
     const activeIntData = INTEGRATIONS.find(i => i.id === activeIntegration);
 
+    const testOnvifPorts = async () => {
+        setPortTestLoading(true); setPortTestResult(null); setSaveError(null);
+        try {
+            const response = await fetch(apiUrl('api/cameras/test-onvif-port'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip: onvifIp, onvif_port: Number(onvifPort), username: onvifUser, password: onvifPass }) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error ?? 'No se pudo probar el puerto');
+            setPortTestResult(data);
+            if (data.detectedPort) setOnvifPort(String(data.detectedPort));
+        } catch (error) { setSaveError(error instanceof Error ? error.message : String(error)); }
+        finally { setPortTestLoading(false); }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xl p-4">
             <div className="bg-[#0d1117] border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden max-h-[90vh] flex flex-col">
@@ -326,6 +340,13 @@ export function AddCameraModal({ onClose, onAdd }: Props) {
                                             <input type="password" value={rtspPass} onChange={e => setRtspPass(e.target.value)} placeholder="••••••••" className={inputClass} />
                                         </Field>
                                     </div>
+                                    <button type="button" onClick={testOnvifPorts} disabled={!onvifIp.trim() || portTestLoading} className="self-start px-4 py-2 text-xs font-bold text-blue-300 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 disabled:opacity-40">
+                                        {portTestLoading ? 'Probando puertos…' : '🔎 Probar ONVIF y detectar puerto'}
+                                    </button>
+                                    {portTestResult && <div className={`text-xs rounded-lg px-3 py-2 border ${portTestResult.detectedPort ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' : 'text-yellow-300 bg-yellow-500/10 border-yellow-500/30'}`}>
+                                        <p className="font-bold">{portTestResult.message}</p>
+                                        <p className="mt-1 font-mono">{portTestResult.results.map(result => `${result.port}: ${result.onvif ? 'ONVIF OK' : result.tcpReachable ? 'TCP abierto, ONVIF no respondió' : 'rechazado'}`).join(' · ')}</p>
+                                    </div>}
                                 </div>
                             )}
 

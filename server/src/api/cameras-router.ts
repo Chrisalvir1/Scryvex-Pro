@@ -2,12 +2,26 @@ import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createConnection } from 'node:net';
 import { CameraService, CreateCameraInput } from './camera-service';
 import { CameraStreamController } from './camera-stream-controller';
 import { CameraProbe } from './camera-probe';
 import { MatterPairingService } from './matter-pairing';
+import { OnvifAdapter } from '../cameras/adapters/onvif-adapter';
+import type { CameraConnectionInput } from '../cameras/camera-adapter';
 
 const execFileAsync = promisify(execFile);
+
+function tcpPortOpen(host: string, port: number, timeoutMs = 1500): Promise<boolean> {
+    return new Promise(resolve => {
+        const socket = createConnection({ host, port });
+        const finish = (open: boolean) => { socket.destroy(); resolve(open); };
+        socket.setTimeout(timeoutMs);
+        socket.once('connect', () => finish(true));
+        socket.once('timeout', () => finish(false));
+        socket.once('error', () => finish(false));
+    });
+}
 
 
 /**
@@ -82,6 +96,27 @@ export function createCamerasRouter(
             console.error('[cameras-router] POST /api/cameras error:', err.message);
             res.status(500).json({ error: 'Failed to create camera', detail: err.message });
         }
+    });
+
+    // Test ONVIF before creating a camera. It checks TCP first, then performs
+    // a real ONVIF profile handshake on every reachable candidate port.
+    router.post('/test-onvif-port', async (req, res) => {
+        const body = req.body as Partial<CameraConnectionInput> & { ports?: number[] };
+        const host = String(body.ip ?? '').trim();
+        const requestedPort = Number(body.onvif_port ?? body.port ?? 8000);
+        if (!host || !Number.isInteger(requestedPort) || requestedPort < 1 || requestedPort > 65535) { res.status(400).json({ error: 'ip y un puerto ONVIF válido son obligatorios' }); return; }
+        const candidates = [...new Set([requestedPort, ...(Array.isArray(body.ports) ? body.ports : [80, 8080, 8899, 8001, 8000])].filter(port => Number.isInteger(port) && port > 0 && port <= 65535))];
+        const adapter = new OnvifAdapter();
+        const results = [];
+        for (const port of candidates) {
+            const tcpReachable = await tcpPortOpen(host, port);
+            if (!tcpReachable) { results.push({ port, tcpReachable: false, onvif: false, message: 'TCP rechazado o sin respuesta' }); continue; }
+            const connection: CameraConnectionInput = { ip: host, port, onvif_port: port, username: body.username, password: body.password };
+            const test = await adapter.testConnection(connection);
+            results.push({ port, tcpReachable: true, onvif: test.success, status: test.status, message: test.message });
+        }
+        const detected = results.find(result => result.onvif);
+        res.json({ requestedPort, detectedPort: detected?.port, results, message: detected ? `ONVIF responde en el puerto ${detected.port}` : 'No se encontró un puerto ONVIF que responda' });
     });
 
     router.post('/:id/discover', async (req, res) => { try { const capabilities = await probeService.runProbe(String(req.params.id)); getWsBridge()?.broadcastCamerasUpdated('camera.updated', String(req.params.id)); res.json({ capabilities }); } catch (err: any) { res.status(502).json({ error: err.message }); } });
