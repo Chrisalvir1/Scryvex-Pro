@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createConnection } from 'node:net';
 import { CameraService, CreateCameraInput } from './camera-service';
@@ -8,7 +8,7 @@ import { CameraStreamController } from './camera-stream-controller';
 import { CameraProbe } from './camera-probe';
 import { MatterPairingService } from './matter-pairing';
 import { OnvifAdapter } from '../cameras/adapters/onvif-adapter';
-import type { CameraConnectionInput } from '../cameras/camera-adapter';
+import { cameraStreamUrl, redactCameraSecrets, type CameraConnectionInput } from '../cameras/camera-adapter';
 
 const execFileAsync = promisify(execFile);
 
@@ -165,6 +165,25 @@ export function createCamerasRouter(
         res.json({ success: true, message: 'Stream stopped' });
     });
 
+    router.get('/:id/preview.mjpeg', async (req, res) => {
+        try {
+            const streamUrl = await streamController.getStreamUrl(String(req.params.id));
+            const boundary = 'scryvexframe';
+            res.status(200);
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Content-Type', `multipart/x-mixed-replace; boundary=${boundary}`);
+            const ffmpeg = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-fflags', '+discardcorrupt', '-analyzeduration', '5000000', '-probesize', '5000000', '-i', streamUrl, '-an', '-vf', 'fps=8', '-q:v', '5', '-f', 'mpjpeg', '-boundary_tag', boundary, 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
+            let stderr = '';
+            ffmpeg.stderr.on('data', chunk => { if (stderr.length < 4000) stderr += chunk.toString(); });
+            ffmpeg.stdout.once('data', () => void cameraService.recordLog(String(req.params.id), 'camera.preview.opened'));
+            ffmpeg.stdout.pipe(res);
+            ffmpeg.once('error', error => void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { message: error.message }));
+            ffmpeg.once('exit', code => { if (code && code !== 0) void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { code, message: redactCameraSecrets(stderr.trim()) }); if (!res.writableEnded) res.end(); });
+            res.once('close', () => { if (!ffmpeg.killed) ffmpeg.kill('SIGTERM'); });
+        } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
+    });
+
     // ── Codec Probe / Analytics ────────────────────────────────────────────────
 
     router.get('/:id/probe', async (req, res) => {
@@ -195,10 +214,8 @@ export function createCamerasRouter(
         const rawUrl = connection.rtsp_url ?? profile?.streamUri;
         if (!rawUrl) { res.status(404).json({ error: 'No hay stream RTSP detectado para generar un snapshot' }); return; }
         try {
-            const streamUrl = new URL(rawUrl);
-            if (connection.username && !streamUrl.username) streamUrl.username = connection.username;
-            if (connection.password && !streamUrl.password) streamUrl.password = connection.password;
-            const { stdout } = await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', streamUrl.toString(), '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1'], { encoding: 'buffer', maxBuffer: 8 * 1024 * 1024, timeout: 12_000 });
+            const streamUrl = cameraStreamUrl(connection, rawUrl);
+            const { stdout } = await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', streamUrl, '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1'], { encoding: 'buffer', maxBuffer: 8 * 1024 * 1024, timeout: 12_000 });
             await cameraService.recordLog(camera.id, 'camera.snapshot.opened');
             res.type('image/jpeg').send(stdout);
         } catch (error) { await cameraService.recordLog(camera.id, 'camera.snapshot.failed', { error: error instanceof Error ? error.message : String(error) }); res.status(502).json({ error: 'No se pudo abrir el stream RTSP para generar el snapshot' }); }
@@ -249,16 +266,29 @@ export function createCamerasRouter(
                     video: {
                         codecs: cam.capabilities.video.profiles.map(profile => profile.codec).filter(Boolean),
                         resolutions: cam.capabilities.video.profiles,
-                        rtsp_url: cam.rtsp_url
+                        rtsp_url: cam.rtsp_url,
+                        remuxOnly: cam.capabilities.matter.supportsMatterRemux // tvOS 27 H.265 Remux support
                     },
                     audio: {
+                        enabled: cam.capabilities.audio.available, // If false, export as Video-Only
                         codec: cam.capabilities.audio.codecs,
-                        samplerate: cam.capabilities.audio.sampleRates
+                        samplerate: cam.capabilities.audio.sampleRates,
+                        twoWay: cam.capabilities.controls.twoWayAudio
                     },
                     networking: {
                         ipv4Address: cam.ip,
                         port: cam.port,
                         forceIpv4: true // Ensures Matter handles Ethernet or Wi-Fi identically via IPv4
+                    },
+                    sensors: {
+                        motion: cam.capabilities.controls.motionEvents // Triggers HomeKit Secure Video
+                    },
+                    controls: {
+                        light: cam.capabilities.controls.lightControl,
+                        siren: cam.capabilities.controls.sirenControl
+                    },
+                    features: {
+                        hksv: cam.capabilities.controls.motionEvents // Enable HKSV if motion is available
                     }
                 },
                 capabilities: cam.capabilities,

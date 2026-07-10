@@ -40,9 +40,9 @@ export interface CameraCapabilities {
     video: { profiles: StreamProfile[]; selectedProfileId?: string; supportsH264: boolean; supportsH265: boolean; supportsTranscoding: boolean };
     audio: { available: boolean; input: boolean; output: boolean; codecs: string[]; selectedCodec?: string; sampleRates: number[] };
     controls: { ptz: boolean; light: boolean; lightControl: boolean; microphone: boolean; speaker: boolean; twoWayAudio: boolean; siren: boolean; sirenControl: boolean; motionEvents: boolean };
-    preview: { snapshot: boolean; rtsp: boolean; webrtc: boolean; hls: boolean };
+    preview: { snapshot: boolean; rtsp: boolean; mjpeg: boolean; webrtc: boolean; hls: boolean };
     yolo: { available: boolean; reason?: string };
-    matter: { available: boolean; published: boolean; commissioned: boolean; reason?: string };
+    matter: { available: boolean; published: boolean; commissioned: boolean; supportsMatterRemux: boolean; reason?: string };
 }
 
 export interface CameraDiscoveryResult {
@@ -64,14 +64,25 @@ export interface CameraAdapter {
     stopPreview?(sessionId: string): Promise<void>;
 }
 
+export function cameraStreamUrl(input: CameraConnectionInput, rawUrl: string): string {
+    const url = new URL(rawUrl);
+    if (input.username && !url.username) url.username = input.username;
+    if (input.password && !url.password) url.password = input.password;
+    return url.toString();
+}
+
+export function redactCameraSecrets(message: string): string {
+    return message.replace(/(rtsps?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, '$1***@');
+}
+
 export function emptyCapabilities(source: CameraCapabilities['source']): CameraCapabilities {
     return {
         discoveryStatus: 'pending', source,
         video: { profiles: [], supportsH264: false, supportsH265: false, supportsTranscoding: false },
         audio: { available: false, input: false, output: false, codecs: [], sampleRates: [] },
         controls: { ptz: false, light: false, lightControl: false, microphone: false, speaker: false, twoWayAudio: false, siren: false, sirenControl: false, motionEvents: false },
-        preview: { snapshot: false, rtsp: false, webrtc: false, hls: false },
+        preview: { snapshot: false, rtsp: false, mjpeg: false, webrtc: false, hls: false },
         yolo: { available: false, reason: 'No hay un runtime YOLO configurado' },
-        matter: { available: false, published: false, commissioned: false, reason: 'Matterbridge no está conectado' },
+        matter: { available: false, published: false, commissioned: false, supportsMatterRemux: false, reason: 'Matterbridge no está conectado' },
     };
 }

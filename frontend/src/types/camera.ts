@@ -10,7 +10,7 @@ export interface CameraCapabilities {
     video: { profiles: StreamProfile[]; selectedProfileId?: string; supportsH264: boolean; supportsH265: boolean; supportsTranscoding: boolean };
     audio: { available: boolean; input: boolean; output: boolean; codecs: string[]; selectedCodec?: string; sampleRates: number[] };
     controls: { ptz: boolean; light: boolean; lightControl: boolean; microphone: boolean; speaker: boolean; twoWayAudio: boolean; siren: boolean; sirenControl: boolean; motionEvents: boolean };
-    preview: { snapshot: boolean; rtsp: boolean; webrtc: boolean; hls: boolean }; yolo: { available: boolean; reason?: string }; matter: { available: boolean; published: boolean; commissioned: boolean; reason?: string };
+    preview: { snapshot: boolean; rtsp: boolean; mjpeg: boolean; webrtc: boolean; hls: boolean }; yolo: { available: boolean; reason?: string }; matter: { available: boolean; published: boolean; commissioned: boolean; reason?: string };
 }
 
 export interface Camera {

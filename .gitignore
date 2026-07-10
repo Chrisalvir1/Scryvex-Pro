@@ -3,7 +3,9 @@ __pycache__
 venv
 .venv
 node_modules/
+.pnpm-store/
 dist/
+*.tsbuildinfo
 .env
 .scryvex_pro/
 *.log

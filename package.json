@@ -11,10 +11,5 @@
   },
   "devDependencies": {
     "typescript": "^7.0.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "typescript": "npm:@typescript/typescript6@^6.0.0"
-    }
   }
 }

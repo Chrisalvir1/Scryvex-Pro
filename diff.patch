@@ -1,0 +1,476 @@
+diff --git a/.gitignore b/.gitignore
+index 08ea2cb..6dd272f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,7 +3,9 @@ __pycache__
+ venv
+ .venv
+ node_modules/
++.pnpm-store/
+ dist/
++*.tsbuildinfo
+ .env
+ .scryvex_pro/
+ *.log
+diff --git a/addon/config.yaml b/addon/config.yaml
+index 8d81645..7b72f28 100644
+--- a/addon/config.yaml
++++ b/addon/config.yaml
+@@ -1,5 +1,5 @@
+ name: "Scryvex Pro V2"
+-version: "2.1.37"
++version: "2.1.38"
+ slug: "scryvex_pro_final"
+ description: "Zero-Latency Local-First NVR con YOLOv10 y Matter 1.6"
+ url: "https://github.com/Chrisalvir1/Scryvex-Pro-V2"
+diff --git a/frontend/src/components/CameraList.tsx b/frontend/src/components/CameraList.tsx
+index 9475613..af605dc 100644
+--- a/frontend/src/components/CameraList.tsx
++++ b/frontend/src/components/CameraList.tsx
+@@ -332,7 +332,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+                             {deleteError}
+                         </p>
+                     )}
+-                    {discoveryError && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">Descubrimiento fallido: {discoveryError}. Revisa los Logs y confirma el puerto ONVIF/credenciales.</p>}
++                    {discoveryError && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">Descubrimiento fallido: {discoveryError}. {selected.protocol === 'ONVIF' ? 'Confirma el puerto ONVIF y las credenciales.' : 'Confirma la URL RTSP y sus credenciales.'}</p>}
+ 
+                     {/* Tabs */}
+                     <div className="flex gap-1 border-b border-white/10">
+@@ -366,7 +366,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+                                                         </div>
+                                                     ) : (
+                                                         <div className="relative w-full h-full bg-slate-900 overflow-hidden flex flex-col items-center justify-center">
+-                                                            {snapshotUrl ? <img src={snapshotUrl} alt={`Snapshot de ${selected.name}`} className="w-full h-full object-contain" onError={() => setDiscoveryError('No se pudo generar un snapshot desde el stream RTSP')} /> : <span className="text-gray-500 font-mono text-sm">Generando snapshot real…</span>}
++                                                            {snapshotUrl ? <img src={snapshotUrl} alt={`Preview en vivo de ${selected.name}`} className="w-full h-full object-contain" onError={() => setDiscoveryError('No se pudo abrir el preview en vivo desde el stream RTSP')} /> : <span className="text-gray-500 font-mono text-sm">Abriendo preview en vivo…</span>}
+                                                             {/* HUD only displays values discovered by the adapter. */}
+                                                             <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 rounded px-3 py-1.5 flex flex-col items-end gap-1 text-[10px] font-mono text-white/80">
+                                                                 <div>CODEC: <span className="text-blue-400 font-bold">{capabilities?.video.profiles[0]?.codec || 'No detectado'}</span></div>
+@@ -394,17 +394,13 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+                                                     onClick={async () => {
+                                                         if (isPlaying) {
+                                                             setIsPlaying(false);
+-                                                            await fetch(apiUrl(`api/cameras/${selected.id}/stream/stop`), { method: 'POST' });
+                                                             setSnapshotUrl(null);
+                                                         } else {
+                                                             setStreamLoading(true);
+                                                             setDiscoveryError(null);
+                                                             try {
+-                                                                const response = await fetch(apiUrl(`api/cameras/${selected.id}/stream/start`), { method: 'POST' });
+-                                                                const data = await response.json();
+-                                                                if (!response.ok) throw new Error(data.error ?? 'No se pudo abrir el stream');
+                                                                 setIsPlaying(true);
+-                                                                setSnapshotUrl(apiUrl(`api/cameras/${selected.id}/snapshot?ts=${Date.now()}`));
++                                                                setSnapshotUrl(apiUrl(`api/cameras/${selected.id}/preview.mjpeg?ts=${Date.now()}`));
+                                                             } catch (error) { setDiscoveryError(error instanceof Error ? error.message : String(error)); }
+                                                             finally { setStreamLoading(false); }
+                                                         }
+@@ -657,7 +653,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+                                 <div>
+                                     <h3 className="text-lg font-bold text-white">Procesamiento IA Local</h3>
+                                     <p className="text-xs text-gray-400">
+-                                        Analiza el stream RTSP de esta cámara localmente utilizando el modelo YOLOv10 (Zero-Latency).
++                                        El detector solo puede habilitarse cuando existe un runtime y modelo compatibles en ejecución.
+                                     </p>
+                                 </div>
+                             </div>
+@@ -666,7 +662,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+                                 <div className="flex-1">
+                                     <h3 className="text-white font-bold text-sm">Habilitar YOLOv10</h3>
+                                     <p className="text-gray-500 text-xs mt-1">
+-                                        Activa la detección de objetos y personas por fotograma. Esto aumenta el uso de CPU/GPU del servidor.
++                                        {capabilities?.yolo.available ? 'Disponible para esta cámara.' : capabilities?.yolo.reason ?? 'Detector no disponible.'}
+                                     </p>
+                                 </div>
+                                 <button
+@@ -678,7 +674,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+                                 </button>
+                             </div>
+                             
+-                            <div className="mt-4">
++                            {capabilities?.yolo.available && <div className="mt-4">
+                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Sensores Expuestos (Vía Matterbridge)</h4>
+                                 <div className="grid grid-cols-2 gap-3">
+                                     <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3 flex flex-col items-center">
+@@ -702,7 +698,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+                                         <span className="text-[9px] text-gray-500 text-center mt-1">Soporte HKSV Exclusivo</span>
+                                     </div>
+                                 </div>
+-                            </div>
++                            </div>}
+                         </div>
+                     )}
+                 </div>
+diff --git a/frontend/src/types/camera.ts b/frontend/src/types/camera.ts
+index 43f2d67..7147c3a 100644
+--- a/frontend/src/types/camera.ts
++++ b/frontend/src/types/camera.ts
+@@ -10,7 +10,7 @@ export interface CameraCapabilities {
+     video: { profiles: StreamProfile[]; selectedProfileId?: string; supportsH264: boolean; supportsH265: boolean; supportsTranscoding: boolean };
+     audio: { available: boolean; input: boolean; output: boolean; codecs: string[]; selectedCodec?: string; sampleRates: number[] };
+     controls: { ptz: boolean; light: boolean; lightControl: boolean; microphone: boolean; speaker: boolean; twoWayAudio: boolean; siren: boolean; sirenControl: boolean; motionEvents: boolean };
+-    preview: { snapshot: boolean; rtsp: boolean; webrtc: boolean; hls: boolean }; yolo: { available: boolean; reason?: string }; matter: { available: boolean; published: boolean; commissioned: boolean; reason?: string };
++    preview: { snapshot: boolean; rtsp: boolean; mjpeg: boolean; webrtc: boolean; hls: boolean }; yolo: { available: boolean; reason?: string }; matter: { available: boolean; published: boolean; commissioned: boolean; reason?: string };
+ }
+ 
+ export interface Camera {
+diff --git a/package.json b/package.json
+index 6f4e75a..3d0a4d7 100644
+--- a/package.json
++++ b/package.json
+@@ -11,10 +11,5 @@
+   },
+   "devDependencies": {
+     "typescript": "^7.0.0"
+-  },
+-  "pnpm": {
+-    "overrides": {
+-      "typescript": "npm:@typescript/typescript6@^6.0.0"
+-    }
+   }
+ }
+diff --git a/plugins/onvif/onvif b/plugins/onvif/onvif
+--- a/plugins/onvif/onvif
++++ b/plugins/onvif/onvif
+@@ -1 +1 @@
+-Subproject commit 5641b572c4ed0d993bb592ac118ea0c2a5a008f5
++Subproject commit 5641b572c4ed0d993bb592ac118ea0c2a5a008f5-dirty
+diff --git a/plugins/onvif/package.json b/plugins/onvif/package.json
+index 4d39277..e8694b2 100644
+--- a/plugins/onvif/package.json
++++ b/plugins/onvif/package.json
+@@ -48,6 +48,7 @@
+    "devDependencies": {
+       "@types/md5": "^2.3.5",
+       "@types/node": "^20.11.0",
+-      "@types/xml2js": "^0.4.14"
++      "@types/xml2js": "^0.4.14",
++      "typescript": "^6.0.0"
+    }
+ }
+diff --git a/plugins/rtsp/package.json b/plugins/rtsp/package.json
+index 800b209..e57656c 100644
+--- a/plugins/rtsp/package.json
++++ b/plugins/rtsp/package.json
+@@ -42,6 +42,7 @@
+       "@scrypted/sdk": "file:../../sdk"
+    },
+    "devDependencies": {
+-      "@types/node": "^20.10.8"
++      "@types/node": "^20.10.8",
++      "typescript": "^6.0.0"
+    }
+ }
+diff --git a/plugins/rtsp/tsconfig.json b/plugins/rtsp/tsconfig.json
+index 34a847a..a44481d 100644
+--- a/plugins/rtsp/tsconfig.json
++++ b/plugins/rtsp/tsconfig.json
+@@ -1,6 +1,6 @@
+ {
+     "compilerOptions": {
+-        "module": "commonjs",
++        "module": "Node16",
+         "target": "ES2021",
+         "resolveJsonModule": true,
+         "moduleResolution": "Node16",
+@@ -10,4 +10,4 @@
+     "include": [
+         "src/**/*"
+     ]
+-}
+\ No newline at end of file
++}
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 6227d9f..60dda17 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -98,7 +98,6 @@ importers:
+       '@types/xml2js':
+         specifier: ^0.4.14
+         version: 0.4.14
+-
+   plugins/bticino:
+     dependencies:
+       '@scrypted/common':
+@@ -274,7 +273,6 @@ importers:
+       '@types/node':
+         specifier: ^20.10.8
+         version: 20.19.43
+-
+   plugins/google-device-access:
+     dependencies:
+       '@googleapis/smartdevicemanagement':
+@@ -594,6 +592,9 @@ importers:
+       '@types/xml2js':
+         specifier: ^0.4.14
+         version: 0.4.14
++      typescript:
++        specifier: ^6.0.0
++        version: 6.0.3
+ 
+   plugins/openvino:
+     devDependencies:
+@@ -713,6 +714,9 @@ importers:
+       '@types/node':
+         specifier: ^20.10.8
+         version: 20.19.43
++      typescript:
++        specifier: ^6.0.0
++        version: 6.0.3
+ 
+   plugins/sip:
+     dependencies:
+@@ -1122,8 +1126,8 @@ importers:
+         specifier: ^2.8.1
+         version: 2.8.1
+       typescript:
+-        specifier: ^5.8.3
+-        version: 5.9.3
++        specifier: ^7.0.0
++        version: 7.0.2
+       whatwg-mimetype:
+         specifier: ^4.0.0
+         version: 4.0.0
+diff --git a/server/package.json b/server/package.json
+index 353e20e..6273e9d 100644
+--- a/server/package.json
++++ b/server/package.json
+@@ -32,7 +32,7 @@
+     "source-map-support": "^0.5.21",
+     "tar": "^7.4.3",
+     "tslib": "^2.8.1",
+-    "typescript": "^5.8.3",
++    "typescript": "^7.0.0",
+     "whatwg-mimetype": "^4.0.0",
+     "ws": "^8.18.2"
+   },
+diff --git a/server/src/api/camera-stream-controller.ts b/server/src/api/camera-stream-controller.ts
+index f1e91ab..3451915 100644
+--- a/server/src/api/camera-stream-controller.ts
++++ b/server/src/api/camera-stream-controller.ts
+@@ -1,6 +1,7 @@
+ import { EventEmitter } from 'events';
+ import { spawn, ChildProcess } from 'node:child_process';
+ import { CameraService } from './camera-service';
++import { cameraStreamUrl, redactCameraSecrets } from '../cameras/camera-adapter';
+ 
+ export class CameraStreamController extends EventEmitter {
+     private streams: Map<string, ChildProcess> = new Map();
+@@ -8,6 +9,7 @@ export class CameraStreamController extends EventEmitter {
+     constructor(private readonly cameraService?: CameraService) { super(); }
+ 
+     private log(cameraId: string, level: string, message: string) {
++        message = redactCameraSecrets(message);
+         const logEntry = `[${level}] ${message}`;
+         console.log(`[Camera ${cameraId}] ${logEntry}`);
+         void this.cameraService?.recordLog(cameraId, level.toLowerCase(), { message });
+@@ -31,11 +33,9 @@ export class CameraStreamController extends EventEmitter {
+     }
+ 
+     async startStream(cameraId: string, requestedCodec?: string) {
++        const streamUrl = await this.getStreamUrl(cameraId);
+         const camera = await this.cameraService?.findById(cameraId);
+-        const connection = await this.cameraService?.getConnectionInput(cameraId);
+-        const profile = camera?.stream_profiles.find(item => item.id === camera.capabilities.video.selectedProfileId) ?? camera?.stream_profiles[0];
+-        const rawUrl = connection?.rtsp_url ?? profile?.streamUri;
+-        if (!camera || !connection || !rawUrl) throw new Error('No existe una URL RTSP detectada para esta cámara');
++        if (!camera) throw new Error('Cámara no encontrada');
+         if (requestedCodec && !(await this.validateCodecCapabilities(cameraId, requestedCodec))) throw new Error(`Codec Validation Failed for ${requestedCodec}`);
+ 
+         if (this.streams.has(cameraId)) {
+@@ -44,16 +44,22 @@ export class CameraStreamController extends EventEmitter {
+         }
+ 
+         this.log(cameraId, 'FFMPEG', `Starting on-demand stream for ${cameraId}`);
+-        const streamUrl = new URL(rawUrl);
+-        if (connection.username && !streamUrl.username) streamUrl.username = connection.username;
+-        if (connection.password && !streamUrl.password) streamUrl.password = connection.password;
+-        const process = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'warning', '-rtsp_transport', 'tcp', '-i', streamUrl.toString(), '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
++        const process = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'warning', '-rtsp_transport', 'tcp', '-i', streamUrl, '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
+         process.stderr?.on('data', data => this.log(cameraId, 'FFMPEG', data.toString().trim()));
+         process.once('error', error => this.log(cameraId, 'camera.stream.failed', error.message));
+         process.once('spawn', () => this.log(cameraId, 'camera.stream.opened', 'ffmpeg abrió el stream'));
+         process.once('exit', code => { this.streams.delete(cameraId); if (code && code !== 0) this.log(cameraId, 'camera.stream.failed', `ffmpeg terminó con código ${code}`); }); this.streams.set(cameraId, process);
+     }
+ 
++    async getStreamUrl(cameraId: string): Promise<string> {
++        const camera = await this.cameraService?.findById(cameraId);
++        const connection = await this.cameraService?.getConnectionInput(cameraId);
++        const profile = camera?.stream_profiles.find(item => item.id === camera.capabilities.video.selectedProfileId) ?? camera?.stream_profiles[0];
++        const rawUrl = connection?.rtsp_url ?? profile?.streamUri;
++        if (!camera || !connection || !rawUrl) throw new Error('No existe una URL RTSP detectada para esta cámara');
++        return cameraStreamUrl(connection, rawUrl);
++    }
++
+     stopStream(cameraId: string) {
+         const stream = this.streams.get(cameraId);
+         if (stream) {
+diff --git a/server/src/api/cameras-router.ts b/server/src/api/cameras-router.ts
+index 13cc68b..9da92db 100644
+--- a/server/src/api/cameras-router.ts
++++ b/server/src/api/cameras-router.ts
+@@ -1,6 +1,6 @@
+ import { Router, Request, Response } from 'express';
+ import { Pool } from 'pg';
+-import { execFile } from 'node:child_process';
++import { execFile, spawn } from 'node:child_process';
+ import { promisify } from 'node:util';
+ import { createConnection } from 'node:net';
+ import { CameraService, CreateCameraInput } from './camera-service';
+@@ -8,7 +8,7 @@ import { CameraStreamController } from './camera-stream-controller';
+ import { CameraProbe } from './camera-probe';
+ import { MatterPairingService } from './matter-pairing';
+ import { OnvifAdapter } from '../cameras/adapters/onvif-adapter';
+-import type { CameraConnectionInput } from '../cameras/camera-adapter';
++import { cameraStreamUrl, redactCameraSecrets, type CameraConnectionInput } from '../cameras/camera-adapter';
+ 
+ const execFileAsync = promisify(execFile);
+ 
+@@ -165,6 +165,25 @@ export function createCamerasRouter(
+         res.json({ success: true, message: 'Stream stopped' });
+     });
+ 
++    router.get('/:id/preview.mjpeg', async (req, res) => {
++        try {
++            const streamUrl = await streamController.getStreamUrl(String(req.params.id));
++            const boundary = 'scryvexframe';
++            res.status(200);
++            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
++            res.setHeader('Pragma', 'no-cache');
++            res.setHeader('Content-Type', `multipart/x-mixed-replace; boundary=${boundary}`);
++            const ffmpeg = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-fflags', '+discardcorrupt', '-analyzeduration', '5000000', '-probesize', '5000000', '-i', streamUrl, '-an', '-vf', 'fps=8', '-q:v', '5', '-f', 'mpjpeg', '-boundary_tag', boundary, 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
++            let stderr = '';
++            ffmpeg.stderr.on('data', chunk => { if (stderr.length < 4000) stderr += chunk.toString(); });
++            ffmpeg.stdout.once('data', () => void cameraService.recordLog(String(req.params.id), 'camera.preview.opened'));
++            ffmpeg.stdout.pipe(res);
++            ffmpeg.once('error', error => void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { message: error.message }));
++            ffmpeg.once('exit', code => { if (code && code !== 0) void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { code, message: redactCameraSecrets(stderr.trim()) }); if (!res.writableEnded) res.end(); });
++            res.once('close', () => { if (!ffmpeg.killed) ffmpeg.kill('SIGTERM'); });
++        } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
++    });
++
+     // ── Codec Probe / Analytics ────────────────────────────────────────────────
+ 
+     router.get('/:id/probe', async (req, res) => {
+@@ -195,10 +214,8 @@ export function createCamerasRouter(
+         const rawUrl = connection.rtsp_url ?? profile?.streamUri;
+         if (!rawUrl) { res.status(404).json({ error: 'No hay stream RTSP detectado para generar un snapshot' }); return; }
+         try {
+-            const streamUrl = new URL(rawUrl);
+-            if (connection.username && !streamUrl.username) streamUrl.username = connection.username;
+-            if (connection.password && !streamUrl.password) streamUrl.password = connection.password;
+-            const { stdout } = await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', streamUrl.toString(), '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1'], { encoding: 'buffer', maxBuffer: 8 * 1024 * 1024, timeout: 12_000 });
++            const streamUrl = cameraStreamUrl(connection, rawUrl);
++            const { stdout } = await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', streamUrl, '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1'], { encoding: 'buffer', maxBuffer: 8 * 1024 * 1024, timeout: 12_000 });
+             await cameraService.recordLog(camera.id, 'camera.snapshot.opened');
+             res.type('image/jpeg').send(stdout);
+         } catch (error) { await cameraService.recordLog(camera.id, 'camera.snapshot.failed', { error: error instanceof Error ? error.message : String(error) }); res.status(502).json({ error: 'No se pudo abrir el stream RTSP para generar el snapshot' }); }
+diff --git a/server/src/cameras/adapters/onvif-adapter.ts b/server/src/cameras/adapters/onvif-adapter.ts
+index 550b6e2..adadeef 100644
+--- a/server/src/cameras/adapters/onvif-adapter.ts
++++ b/server/src/cameras/adapters/onvif-adapter.ts
+@@ -100,6 +100,7 @@ export class OnvifAdapter implements CameraAdapter {
+             capabilities.controls.sirenControl = advertisedSiren && relayOrAuxiliary;
+             capabilities.preview.snapshot = streamProfiles.some(profile => !!profile.snapshotUri);
+             capabilities.preview.rtsp = streamProfiles.some(profile => !!profile.streamUri);
++            capabilities.preview.mjpeg = capabilities.preview.rtsp;
+             return { capabilities, streamProfiles };
+         } catch (error) {
+             capabilities.discoveryStatus = /unauthorized|authentication|not authorized|401/i.test(error instanceof Error ? error.message : String(error)) ? 'authentication_failed' : 'error';
+diff --git a/server/src/cameras/adapters/rtsp-adapter.ts b/server/src/cameras/adapters/rtsp-adapter.ts
+index 4d1031e..851216d 100644
+--- a/server/src/cameras/adapters/rtsp-adapter.ts
++++ b/server/src/cameras/adapters/rtsp-adapter.ts
+@@ -1,13 +1,13 @@
+ import { spawn } from 'node:child_process';
+ import { randomUUID } from 'node:crypto';
+ import type { CameraAdapter, CameraCapabilities, CameraConnectionInput, CameraDiscoveryResult, ConnectionTestResult, StreamProfile } from '../camera-adapter';
+-import { emptyCapabilities } from '../camera-adapter';
++import { cameraStreamUrl, emptyCapabilities, redactCameraSecrets } from '../camera-adapter';
+ 
+ interface ProbeStream { codec_name?: string; codec_long_name?: string; width?: number; height?: number; r_frame_rate?: string; bit_rate?: string; sample_rate?: string; codec_type?: string; }
+ 
+ function runProbe(url: string): Promise<{ streams: ProbeStream[] }> {
+     return new Promise((resolve, reject) => {
+-        const child = spawn('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', url], { stdio: ['ignore', 'pipe', 'pipe'] });
++        const child = spawn('ffprobe', ['-v', 'error', '-rtsp_transport', 'tcp', '-rw_timeout', '10000000', '-show_streams', '-show_format', '-of', 'json', url], { stdio: ['ignore', 'pipe', 'pipe'] });
+         let stdout = ''; let stderr = '';
+         child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk);
+         child.once('error', reject); child.once('close', code => code === 0 ? resolve(JSON.parse(stdout) as { streams: ProbeStream[] }) : reject(new Error(stderr || `ffprobe terminó con código ${code}`)));
+@@ -18,16 +18,16 @@ function fps(value?: string): number | undefined { if (!value) return undefined;
+ 
+ export class RtspAdapter implements CameraAdapter {
+     readonly protocol = 'RTSP' as const;
+-    private async probe(input: CameraConnectionInput) { if (!input.rtsp_url) throw new Error('La cámara RTSP no tiene rtsp_url'); return runProbe(input.rtsp_url); }
++    private async probe(input: CameraConnectionInput) { if (!input.rtsp_url) throw new Error('La cámara RTSP no tiene rtsp_url'); return runProbe(cameraStreamUrl(input, input.rtsp_url)); }
+     async discover(input: CameraConnectionInput): Promise<CameraDiscoveryResult> {
+         const base = emptyCapabilities('rtsp');
+         try {
+             const result = await this.probe(input);
+             const profiles: StreamProfile[] = result.streams.filter(s => s.codec_type === 'video').map((s, i) => ({ id: `rtsp-${i}`, name: i ? 'Video' : 'Principal', codec: s.codec_name?.toUpperCase(), width: s.width, height: s.height, fps: fps(s.r_frame_rate), bitrate: s.bit_rate ? Number(s.bit_rate) : undefined }));
+             const audio = result.streams.filter(s => s.codec_type === 'audio');
+-            base.discoveryStatus = 'online'; base.lastCheckedAt = new Date().toISOString(); base.video.profiles = profiles; base.video.supportsH264 = profiles.some(p => p.codec === 'H264'); base.video.supportsH265 = profiles.some(p => p.codec === 'HEVC' || p.codec === 'H265'); base.video.selectedProfileId = profiles[0]?.id; base.audio.available = audio.length > 0; base.audio.codecs = audio.flatMap(s => s.codec_name ? [s.codec_name.toUpperCase()] : []); base.audio.sampleRates = audio.flatMap(s => s.sample_rate ? [Number(s.sample_rate)] : []); base.preview.rtsp = true;
++            base.discoveryStatus = 'online'; base.lastCheckedAt = new Date().toISOString(); base.video.profiles = profiles; base.video.supportsH264 = profiles.some(p => p.codec === 'H264'); base.video.supportsH265 = profiles.some(p => p.codec === 'HEVC' || p.codec === 'H265'); base.video.selectedProfileId = profiles[0]?.id; base.audio.available = audio.length > 0; base.audio.codecs = audio.flatMap(s => s.codec_name ? [s.codec_name.toUpperCase()] : []); base.audio.sampleRates = audio.flatMap(s => s.sample_rate ? [Number(s.sample_rate)] : []); base.preview.rtsp = profiles.length > 0; base.preview.mjpeg = profiles.length > 0;
+             return { capabilities: base, streamProfiles: profiles };
+-        } catch (error) { base.discoveryStatus = 'error'; base.lastCheckedAt = new Date().toISOString(); throw Object.assign(new Error(error instanceof Error ? error.message : String(error)), { capabilities: base }); }
++        } catch (error) { base.discoveryStatus = 'error'; base.lastCheckedAt = new Date().toISOString(); const message = redactCameraSecrets(error instanceof Error ? error.message : String(error)); throw Object.assign(new Error(message), { capabilities: base }); }
+     }
+     async getCapabilities(input: CameraConnectionInput) { return (await this.discover(input)).capabilities; }
+     async testConnection(input: CameraConnectionInput): Promise<ConnectionTestResult> { try { await this.probe(input); return { success: true, status: 'online' }; } catch (error) { return { success: false, status: 'error', message: error instanceof Error ? error.message : String(error) }; } }
+diff --git a/server/src/cameras/camera-adapter.ts b/server/src/cameras/camera-adapter.ts
+index cd6f072..d9ab180 100644
+--- a/server/src/cameras/camera-adapter.ts
++++ b/server/src/cameras/camera-adapter.ts
+@@ -40,7 +40,7 @@ export interface CameraCapabilities {
+     video: { profiles: StreamProfile[]; selectedProfileId?: string; supportsH264: boolean; supportsH265: boolean; supportsTranscoding: boolean };
+     audio: { available: boolean; input: boolean; output: boolean; codecs: string[]; selectedCodec?: string; sampleRates: number[] };
+     controls: { ptz: boolean; light: boolean; lightControl: boolean; microphone: boolean; speaker: boolean; twoWayAudio: boolean; siren: boolean; sirenControl: boolean; motionEvents: boolean };
+-    preview: { snapshot: boolean; rtsp: boolean; webrtc: boolean; hls: boolean };
++    preview: { snapshot: boolean; rtsp: boolean; mjpeg: boolean; webrtc: boolean; hls: boolean };
+     yolo: { available: boolean; reason?: string };
+     matter: { available: boolean; published: boolean; commissioned: boolean; reason?: string };
+ }
+@@ -64,13 +64,24 @@ export interface CameraAdapter {
+     stopPreview?(sessionId: string): Promise<void>;
+ }
+ 
++export function cameraStreamUrl(input: CameraConnectionInput, rawUrl: string): string {
++    const url = new URL(rawUrl);
++    if (input.username && !url.username) url.username = input.username;
++    if (input.password && !url.password) url.password = input.password;
++    return url.toString();
++}
++
++export function redactCameraSecrets(message: string): string {
++    return message.replace(/(rtsps?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, '$1***@');
++}
++
+ export function emptyCapabilities(source: CameraCapabilities['source']): CameraCapabilities {
+     return {
+         discoveryStatus: 'pending', source,
+         video: { profiles: [], supportsH264: false, supportsH265: false, supportsTranscoding: false },
+         audio: { available: false, input: false, output: false, codecs: [], sampleRates: [] },
+         controls: { ptz: false, light: false, lightControl: false, microphone: false, speaker: false, twoWayAudio: false, siren: false, sirenControl: false, motionEvents: false },
+-        preview: { snapshot: false, rtsp: false, webrtc: false, hls: false },
++        preview: { snapshot: false, rtsp: false, mjpeg: false, webrtc: false, hls: false },
+         yolo: { available: false, reason: 'No hay un runtime YOLO configurado' },
+         matter: { available: false, published: false, commissioned: false, reason: 'Matterbridge no está conectado' },
+     };
+diff --git a/server/tsconfig.json b/server/tsconfig.json
+index 3b7e98d..ea9a32d 100644
+--- a/server/tsconfig.json
++++ b/server/tsconfig.json
+@@ -9,6 +9,7 @@
+         "noImplicitOverride": true,
+         "noImplicitReturns": true,
+         "outDir": "./dist",
++        "rootDir": "./src",
+         "esModuleInterop": true,
+         "moduleResolution": "NodeNext",
+         // skip error: Interface 'WebGL2RenderingContext' incorrectly extends interface 'WebGL2RenderingContextBase'.
+@@ -19,4 +20,4 @@
+     "include": [
+         "src/**/*", 
+      ],
+-}
+\ No newline at end of file
++}

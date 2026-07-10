@@ -332,7 +332,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                             {deleteError}
                         </p>
                     )}
-                    {discoveryError && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">Descubrimiento fallido: {discoveryError}. Revisa los Logs y confirma el puerto ONVIF/credenciales.</p>}
+                    {discoveryError && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">Descubrimiento fallido: {discoveryError}. {selected.protocol === 'ONVIF' ? 'Confirma el puerto ONVIF y las credenciales.' : 'Confirma la URL RTSP y sus credenciales.'}</p>}
 
                     {/* Tabs */}
                     <div className="flex gap-1 border-b border-white/10">
@@ -366,7 +366,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                                         </div>
                                                     ) : (
                                                         <div className="relative w-full h-full bg-slate-900 overflow-hidden flex flex-col items-center justify-center">
-                                                            {snapshotUrl ? <img src={snapshotUrl} alt={`Snapshot de ${selected.name}`} className="w-full h-full object-contain" onError={() => setDiscoveryError('No se pudo generar un snapshot desde el stream RTSP')} /> : <span className="text-gray-500 font-mono text-sm">Generando snapshot real…</span>}
+                                                            {snapshotUrl ? <img src={snapshotUrl} alt={`Preview en vivo de ${selected.name}`} className="w-full h-full object-contain" onError={() => setDiscoveryError('No se pudo abrir el preview en vivo desde el stream RTSP')} /> : <span className="text-gray-500 font-mono text-sm">Abriendo preview en vivo…</span>}
                                                             {/* HUD only displays values discovered by the adapter. */}
                                                             <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 rounded px-3 py-1.5 flex flex-col items-end gap-1 text-[10px] font-mono text-white/80">
                                                                 <div>CODEC: <span className="text-blue-400 font-bold">{capabilities?.video.profiles[0]?.codec || 'No detectado'}</span></div>
@@ -394,17 +394,13 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                                     onClick={async () => {
                                                         if (isPlaying) {
                                                             setIsPlaying(false);
-                                                            await fetch(apiUrl(`api/cameras/${selected.id}/stream/stop`), { method: 'POST' });
                                                             setSnapshotUrl(null);
                                                         } else {
                                                             setStreamLoading(true);
                                                             setDiscoveryError(null);
                                                             try {
-                                                                const response = await fetch(apiUrl(`api/cameras/${selected.id}/stream/start`), { method: 'POST' });
-                                                                const data = await response.json();
-                                                                if (!response.ok) throw new Error(data.error ?? 'No se pudo abrir el stream');
                                                                 setIsPlaying(true);
-                                                                setSnapshotUrl(apiUrl(`api/cameras/${selected.id}/snapshot?ts=${Date.now()}`));
+                                                                setSnapshotUrl(apiUrl(`api/cameras/${selected.id}/preview.mjpeg?ts=${Date.now()}`));
                                                             } catch (error) { setDiscoveryError(error instanceof Error ? error.message : String(error)); }
                                                             finally { setStreamLoading(false); }
                                                         }
@@ -657,7 +653,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                 <div>
                                     <h3 className="text-lg font-bold text-white">Procesamiento IA Local</h3>
                                     <p className="text-xs text-gray-400">
-                                        Analiza el stream RTSP de esta cámara localmente utilizando el modelo YOLOv10 (Zero-Latency).
+                                        El detector solo puede habilitarse cuando existe un runtime y modelo compatibles en ejecución.
                                     </p>
                                 </div>
                             </div>
@@ -666,7 +662,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                 <div className="flex-1">
                                     <h3 className="text-white font-bold text-sm">Habilitar YOLOv10</h3>
                                     <p className="text-gray-500 text-xs mt-1">
-                                        Activa la detección de objetos y personas por fotograma. Esto aumenta el uso de CPU/GPU del servidor.
+                                        {capabilities?.yolo.available ? 'Disponible para esta cámara.' : capabilities?.yolo.reason ?? 'Detector no disponible.'}
                                     </p>
                                 </div>
                                 <button
@@ -678,7 +674,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                 </button>
                             </div>
                             
-                            <div className="mt-4">
+                            {capabilities?.yolo.available && <div className="mt-4">
                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Sensores Expuestos (Vía Matterbridge)</h4>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3 flex flex-col items-center">
@@ -702,7 +698,7 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                         <span className="text-[9px] text-gray-500 text-center mt-1">Soporte HKSV Exclusivo</span>
                                     </div>
                                 </div>
-                            </div>
+                            </div>}
                         </div>
                     )}
                 </div>

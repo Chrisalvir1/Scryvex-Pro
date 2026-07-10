@@ -1,5 +1,6 @@
+import { spawn } from 'node:child_process';
 import type { CameraAdapter, CameraConnectionInput, CameraDiscoveryResult, CameraCapabilities, ConnectionTestResult, StreamProfile } from '../camera-adapter';
-import { emptyCapabilities } from '../camera-adapter';
+import { cameraStreamUrl, emptyCapabilities, redactCameraSecrets } from '../camera-adapter';
 
 function call<T>(run: (callback: (error: Error | null, value: T) => void) => void): Promise<T> {
     return new Promise((resolve, reject) => run((error, value) => error ? reject(error) : resolve(value)));
@@ -9,6 +10,19 @@ function includesCapability(value: unknown, words: string[]) {
     const text = JSON.stringify(value ?? {}).toLowerCase();
     return words.some(word => text.includes(word));
 }
+
+interface ProbeStream { codec_name?: string; codec_long_name?: string; width?: number; height?: number; r_frame_rate?: string; bit_rate?: string; sample_rate?: string; codec_type?: string; }
+
+function runProbe(url: string): Promise<{ streams: ProbeStream[] }> {
+    return new Promise((resolve, reject) => {
+        const child = spawn('ffprobe', ['-v', 'error', '-rtsp_transport', 'tcp', '-rw_timeout', '10000000', '-show_streams', '-show_format', '-of', 'json', url], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = ''; let stderr = '';
+        child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk);
+        child.once('error', reject); child.once('close', code => code === 0 ? resolve(JSON.parse(stdout) as { streams: ProbeStream[] }) : reject(new Error(stderr || `ffprobe terminó con código ${code}`)));
+    });
+}
+
+function fps(value?: string): number | undefined { if (!value) return undefined; const parts = value.split('/'); return parts.length === 2 ? Number(parts[0]) / Number(parts[1]) : Number(value); }
 
 export class OnvifAdapter implements CameraAdapter {
     readonly protocol = 'ONVIF' as const;
@@ -41,24 +55,59 @@ export class OnvifAdapter implements CameraAdapter {
                 let snapshotUri: string | undefined;
                 try { streamUri = (await call<any>(callback => cam.getStreamUri({ protocol: 'RTSP', profileToken: token }, callback)))?.uri; } catch { /* a profile may not expose RTSP */ }
                 try { snapshotUri = (await call<any>(callback => cam.getSnapshotUri({ profileToken: token }, callback)))?.uri; } catch { /* snapshots are optional */ }
+                
                 const video = profile?.videoEncoderConfiguration ?? profile?.VideoEncoderConfiguration;
                 const audio = profile?.audioEncoderConfiguration ?? profile?.AudioEncoderConfiguration;
-                const codec = video?.encoding ?? video?.Encoding;
-                const audioCodec = audio?.encoding ?? audio?.Encoding;
-                const sampleRate = audio?.sampleRate ?? audio?.SampleRate;
+                let codec = video?.encoding ?? video?.Encoding;
+                let audioCodec = audio?.encoding ?? audio?.Encoding;
+                let sampleRate = audio?.sampleRate ?? audio?.SampleRate;
+                let width = video?.resolution?.width ?? video?.Resolution?.Width;
+                let height = video?.resolution?.height ?? video?.Resolution?.Height;
+                let frameRate = video?.rateControl?.frameRateLimit ?? video?.RateControl?.FrameRateLimit;
+                let bitrate = video?.rateControl?.bitrateLimit ?? video?.RateControl?.BitrateLimit;
+
+                // Si hay URL de stream, usamos ffprobe para obtener los valores REALES del hardware
+                if (streamUri) {
+                    try {
+                        const probeUrl = cameraStreamUrl(input, streamUri);
+                        const probe = await runProbe(probeUrl);
+                        const vStream = probe.streams.find(s => s.codec_type === 'video');
+                        const aStreams = probe.streams.filter(s => s.codec_type === 'audio');
+                        
+                        if (vStream) {
+                            codec = vStream.codec_name?.toUpperCase() ?? codec;
+                            width = vStream.width ?? width;
+                            height = vStream.height ?? height;
+                            frameRate = fps(vStream.r_frame_rate) ?? frameRate;
+                            bitrate = vStream.bit_rate ? Number(vStream.bit_rate) : bitrate;
+                        }
+                        if (aStreams.length > 0) {
+                            for (const aStream of aStreams) {
+                                const ac = aStream.codec_name?.toUpperCase();
+                                const sr = aStream.sample_rate ? Number(aStream.sample_rate) : undefined;
+                                if (ac && !capabilities.audio.codecs.includes(ac)) capabilities.audio.codecs.push(ac);
+                                if (sr && !capabilities.audio.sampleRates.includes(sr)) capabilities.audio.sampleRates.push(sr);
+                            }
+                        }
+                    } catch (e) {
+                        // ffprobe failed, we fallback to ONVIF XML values
+                    }
+                } else {
+                    if (typeof audioCodec === 'string' && !capabilities.audio.codecs.includes(audioCodec.toUpperCase())) capabilities.audio.codecs.push(audioCodec.toUpperCase());
+                    if (typeof sampleRate === 'number' && !capabilities.audio.sampleRates.includes(sampleRate)) capabilities.audio.sampleRates.push(sampleRate);
+                }
+
                 streamProfiles.push({
                     id: token ?? `onvif-${index}`,
                     name: profile?.name ?? profile?.Name,
                     codec: typeof codec === 'string' ? codec.toUpperCase() : undefined,
-                    width: video?.resolution?.width ?? video?.Resolution?.Width,
-                    height: video?.resolution?.height ?? video?.Resolution?.Height,
-                    fps: video?.rateControl?.frameRateLimit ?? video?.RateControl?.FrameRateLimit,
-                    bitrate: video?.rateControl?.bitrateLimit ?? video?.RateControl?.BitrateLimit,
+                    width,
+                    height,
+                    fps: frameRate,
+                    bitrate,
                     streamUri,
                     snapshotUri,
                 });
-                if (typeof audioCodec === 'string' && !capabilities.audio.codecs.includes(audioCodec.toUpperCase())) capabilities.audio.codecs.push(audioCodec.toUpperCase());
-                if (typeof sampleRate === 'number' && !capabilities.audio.sampleRates.includes(sampleRate)) capabilities.audio.sampleRates.push(sampleRate);
             }
 
             const ptz = !!(onvifCapabilities?.PTZ ?? onvifCapabilities?.ptz);
@@ -100,6 +149,8 @@ export class OnvifAdapter implements CameraAdapter {
             capabilities.controls.sirenControl = advertisedSiren && relayOrAuxiliary;
             capabilities.preview.snapshot = streamProfiles.some(profile => !!profile.snapshotUri);
             capabilities.preview.rtsp = streamProfiles.some(profile => !!profile.streamUri);
+            capabilities.preview.mjpeg = capabilities.preview.rtsp;
+            capabilities.matter.supportsMatterRemux = capabilities.video.supportsH264 || capabilities.video.supportsH265;
             return { capabilities, streamProfiles };
         } catch (error) {
             capabilities.discoveryStatus = /unauthorized|authentication|not authorized|401/i.test(error instanceof Error ? error.message : String(error)) ? 'authentication_failed' : 'error';
