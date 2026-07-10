@@ -256,44 +256,79 @@ export function createCamerasRouter(
             const cameras = await cameraService.findAll();
             
             // Format cameras strictly matching the Matter object model
-            const matterDevices = cameras.filter(cam => cam.capabilities?.matter?.available).map(cam => ({
-                id: cam.id,
-                deviceType: 'VideoCamera',
-                name: cam.matter_device_name || cam.name,
-                vendorId: cam.matter_vendor_id,
-                productId: cam.matter_product_id,
-                endpoints: {
-                    video: {
-                        codecs: cam.capabilities.video.profiles.map(profile => profile.codec).filter(Boolean),
-                        resolutions: cam.capabilities.video.profiles,
-                        rtsp_url: cam.rtsp_url,
-                        remuxOnly: cam.capabilities.matter.supportsMatterRemux // tvOS 27 H.265 Remux support
+            const matterDevices = cameras.filter(cam => cam.capabilities?.matter?.available).map(cam => {
+                const profiles = cam.capabilities?.video?.profiles || [];
+                
+                // Map HKSV Video Tiers (Section 2 of HKSV Specification)
+                const hksv_video_tiers = profiles.map((p, index) => {
+                    let quality = 3; // Default to Medium
+                    let targetBitrate = 1700;
+                    if (p.width && p.width >= 3840) { quality = 1; targetBitrate = 4500; } // Highest (4K)
+                    else if (p.width && p.width >= 1920) { quality = 2; targetBitrate = 2800; } // High (2K/1080p)
+                    else if (p.width && p.width <= 640) { quality = 4; targetBitrate = 180; } // Low (360p)
+
+                    return {
+                        Identifier: index + 1,
+                        Quality: quality,
+                        TargetAverageBitrate: p.bitrate ? Math.min(p.bitrate / 1000, targetBitrate) : targetBitrate,
+                        Width: p.width || 1920,
+                        Height: p.height || 1080,
+                        FrameRate: p.fps || 30
+                    };
+                });
+
+                // Map HKSV Audio Tiers (Section 4.4 of HKSV Specification)
+                // Apple strictly requires Opus (Codec = 3) and 16kHz or 24kHz capture, 48kHz transmission.
+                const hksv_audio_tiers = cam.capabilities?.audio?.available ? [{
+                    Identifier: 1,
+                    TargetAverageBitrate: 24000,
+                    SampleRate: 1, // 1 = 16kHz (Capture rate)
+                    BitDepth: 2, // 2 = 16-bit
+                    PacketTime: 20, // Mandatory 20ms
+                    NumberOfChannels: 1 // Mandatory 1 channel
+                }] : [];
+
+                return {
+                    id: cam.id,
+                    deviceType: 'VideoCamera',
+                    name: cam.matter_device_name || cam.name,
+                    vendorId: cam.matter_vendor_id,
+                    productId: cam.matter_product_id,
+                    endpoints: {
+                        video: {
+                            codecs: profiles.map(profile => profile.codec).filter(Boolean),
+                            resolutions: profiles,
+                            hksv_tiers: hksv_video_tiers,
+                            rtsp_url: cam.rtsp_url,
+                            remuxOnly: cam.capabilities?.matter?.supportsMatterRemux // tvOS 27 H.265 Remux support
+                        },
+                        audio: {
+                            enabled: cam.capabilities?.audio?.available, // If false, export as Video-Only
+                            codec: cam.capabilities?.audio?.codecs,
+                            samplerate: cam.capabilities?.audio?.sampleRates,
+                            twoWay: cam.capabilities?.controls?.twoWayAudio,
+                            hksv_tiers: hksv_audio_tiers
+                        },
+                        networking: {
+                            ipv4Address: cam.ip,
+                            port: cam.port,
+                            forceIpv4: true // Ensures Matter handles Ethernet or Wi-Fi identically via IPv4
+                        },
+                        sensors: {
+                            motion: cam.capabilities?.controls?.motionEvents // Triggers HomeKit Secure Video
+                        },
+                        controls: {
+                            light: cam.capabilities?.controls?.lightControl,
+                            siren: cam.capabilities?.controls?.sirenControl
+                        },
+                        features: {
+                            hksv: cam.capabilities?.controls?.motionEvents // Enable HKSV if motion is available
+                        }
                     },
-                    audio: {
-                        enabled: cam.capabilities.audio.available, // If false, export as Video-Only
-                        codec: cam.capabilities.audio.codecs,
-                        samplerate: cam.capabilities.audio.sampleRates,
-                        twoWay: cam.capabilities.controls.twoWayAudio
-                    },
-                    networking: {
-                        ipv4Address: cam.ip,
-                        port: cam.port,
-                        forceIpv4: true // Ensures Matter handles Ethernet or Wi-Fi identically via IPv4
-                    },
-                    sensors: {
-                        motion: cam.capabilities.controls.motionEvents // Triggers HomeKit Secure Video
-                    },
-                    controls: {
-                        light: cam.capabilities.controls.lightControl,
-                        siren: cam.capabilities.controls.sirenControl
-                    },
-                    features: {
-                        hksv: cam.capabilities.controls.motionEvents // Enable HKSV if motion is available
-                    }
-                },
-                capabilities: cam.capabilities,
-                status: cam.status
-            }));
+                    capabilities: cam.capabilities,
+                    status: cam.status
+                };
+            });
 
             res.json({ devices: matterDevices });
         } catch (err: any) {
