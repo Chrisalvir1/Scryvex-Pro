@@ -66,8 +66,15 @@ export interface CameraAdapter {
 
 export function cameraStreamUrl(input: CameraConnectionInput, rawUrl: string): string {
     const url = new URL(rawUrl);
-    if (input.username && !url.username) url.username = input.username;
-    if (input.password && !url.password) url.password = input.password;
+    // Only inject credentials if the URL has absolutely no authentication.
+    // ONVIF cameras frequently embed session tokens in the path; injecting
+    // credentials on top of those breaks the URL and causes FFmpeg to fail
+    // with "Invalid data found when processing input".
+    const hasAuth = url.username || url.password;
+    if (!hasAuth) {
+        if (input.username) url.username = encodeURIComponent(input.username);
+        if (input.password) url.password = encodeURIComponent(input.password);
+    }
     return url.toString();
 }
 

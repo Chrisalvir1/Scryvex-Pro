@@ -167,6 +167,9 @@ export class OnvifAdapter implements CameraAdapter {
             capabilities.matter.supportsMatterRemux = capabilities.video.supportsH264 || capabilities.video.supportsH265;
             capabilities.matter.available = true;
             capabilities.matter.reason = undefined;
+            // YOLO is available whenever we have a live RTSP stream to consume
+            capabilities.yolo.available = capabilities.preview.rtsp;
+            capabilities.yolo.reason = capabilities.preview.rtsp ? undefined : 'No se detectó un stream RTSP válido';
             return { capabilities, streamProfiles };
         } catch (error) {
             capabilities.discoveryStatus = /unauthorized|authentication|not authorized|401/i.test(error instanceof Error ? error.message : String(error)) ? 'authentication_failed' : 'error';
