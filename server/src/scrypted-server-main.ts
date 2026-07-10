@@ -32,6 +32,9 @@ import { CameraService } from './api/camera-service';
 import { createCamerasRouter } from './api/cameras-router';
 import { createPluginsRouter } from './api/plugins-router';
 import { CamerasWebSocketBridge } from './api/cameras-ws';
+import { SystemService } from './api/system-service';
+import { SystemDiagnosticsService } from './media/system-diagnostics';
+import { createSystemRouter } from './api/system-router';
 import { Pool } from 'pg';
 
 export type Runtime = ScryptedRuntime;
@@ -163,6 +166,16 @@ async function start(mainFilename: string, options?: {
     const cameraService = new CameraService(pgPool);
     try {
         await cameraService.migrate();
+
+    const systemService = new SystemService(pgPool);
+    await systemService.migrate();
+
+    const diagnosticsService = SystemDiagnosticsService.getInstance();
+    diagnosticsService.setSystemService(systemService);
+    // Non-blocking initialization of diagnostics
+    diagnosticsService.refresh().catch(err => {
+        console.error('[MediaDiagnostics] Failed to run initial diagnostics:', err);
+    });
         // Matter initialization will happen separately
     } catch (err: any) {
         console.error('[CameraService] Migration failed (PostgreSQL may not be ready):', err.message);
@@ -806,6 +819,7 @@ async function start(mainFilename: string, options?: {
     });
 
     let wsBridge: import('./api/cameras-ws').CamerasWebSocketBridge | undefined;
+    app.use('/api/system', createSystemRouter());
     app.use('/api/cameras', createCamerasRouter(cameraService, pgPool, () => wsBridge));
     app.use('/api/plugins', createPluginsRouter(pgPool));
 

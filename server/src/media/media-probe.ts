@@ -1,0 +1,172 @@
+import { spawn } from 'node:child_process';
+import { RawStreamInfo, normalizeCodec, ProfileValidationStatus, RtspErrorCategory, classifyRtspError } from '../cameras/camera-adapter';
+
+export interface ProbeResult {
+    success: boolean;
+    durationMs: number;
+    exitCode: number | null;
+    errorCategory?: RtspErrorCategory;
+    stderrSummary?: string;
+    rawInfo?: RawStreamInfo;
+    transportUsed?: 'tcp' | 'udp';
+}
+
+function runFfprobe(url: string, transport: 'tcp' | 'udp', timeoutMs: number = 10000): Promise<{ stdout: string, stderr: string, exitCode: number | null, durationMs: number }> {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const transportFlag = transport === 'tcp' ? 'tcp' : 'udp';
+        
+        const child = spawn('ffprobe', [
+            '-v', 'error',
+            '-rtsp_transport', transportFlag,
+            '-rw_timeout', (timeoutMs * 1000).toString(),
+            '-analyzeduration', '5000000',
+            '-probesize', '5000000',
+            '-show_streams',
+            '-show_format',
+            '-of', 'json',
+            url
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', chunk => { stdout += chunk.toString(); });
+        child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+
+        let didTimeout = false;
+        const timer = setTimeout(() => {
+            didTimeout = true;
+            child.kill('SIGKILL');
+        }, timeoutMs + 2000); // 2s grace period beyond rw_timeout
+
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            resolve({
+                stdout,
+                stderr,
+                exitCode: didTimeout ? null : code,
+                durationMs: Date.now() - start
+            });
+        });
+        
+        child.on('error', (err) => {
+            clearTimeout(timer);
+            resolve({
+                stdout: '',
+                stderr: `Failed to start ffprobe: ${err.message}`,
+                exitCode: null,
+                durationMs: Date.now() - start
+            });
+        });
+    });
+}
+
+function parseFraction(val?: string): number | undefined {
+    if (!val || val === '0/0') return undefined;
+    const parts = val.split('/');
+    if (parts.length === 2) {
+        const num = Number(parts[0]);
+        const den = Number(parts[1]);
+        if (den !== 0) return num / den;
+    }
+    return Number(val) || undefined;
+}
+
+export async function probeMediaStream(url: string, timeoutMs: number = 10000): Promise<ProbeResult> {
+    // Attempt TCP first
+    let result = await runFfprobe(url, 'tcp', timeoutMs);
+    let transport: 'tcp' | 'udp' = 'tcp';
+
+    // Fallback to UDP if TCP explicitly fails due to transport unsupported or connection timeout 
+    // without returning valid streams (some older ONVIF cameras only speak UDP).
+    if (result.exitCode !== 0) {
+        const category = classifyRtspError(result.stderr, result.exitCode);
+        if (category === 'rtsp_461_transport_unsupported' || category === 'connection_timeout') {
+            const udpResult = await runFfprobe(url, 'udp', timeoutMs);
+            if (udpResult.exitCode === 0 || udpResult.stdout.includes('streams')) {
+                result = udpResult;
+                transport = 'udp';
+            }
+        }
+    }
+
+    const probeResult: ProbeResult = {
+        success: result.exitCode === 0,
+        durationMs: result.durationMs,
+        exitCode: result.exitCode,
+        transportUsed: transport,
+    };
+
+    if (result.exitCode !== 0) {
+        probeResult.errorCategory = classifyRtspError(result.stderr, result.exitCode);
+        probeResult.stderrSummary = result.stderr.substring(0, 500).replace(/\n/g, ' ').trim() || 'Unknown error';
+    }
+
+    try {
+        if (result.stdout.trim()) {
+            const parsed = JSON.parse(result.stdout);
+            const vStream = parsed.streams?.find((s: any) => s.codec_type === 'video');
+            const aStream = parsed.streams?.find((s: any) => s.codec_type === 'audio');
+
+            if (!vStream && !aStream) {
+                probeResult.success = false;
+                probeResult.errorCategory = 'no_video_stream';
+                probeResult.stderrSummary = 'El stream fue analizado pero no contiene video ni audio.';
+                return probeResult;
+            }
+
+            const rawInfo: RawStreamInfo = {
+                transport,
+                hasVideo: !!vStream,
+                hasAudio: !!aStream
+            };
+
+            if (vStream) {
+                const codecNames = normalizeCodec(vStream.codec_name || 'unknown');
+                rawInfo.video = {
+                    rawCodec: vStream.codec_name || 'unknown',
+                    normalizedCodec: codecNames.normalizedCodec,
+                    displayCodec: codecNames.displayCodec,
+                    profile: vStream.profile,
+                    level: vStream.level?.toString(),
+                    width: vStream.width || 0,
+                    height: vStream.height || 0,
+                    fps: parseFraction(vStream.r_frame_rate || vStream.avg_frame_rate),
+                    bitrate: vStream.bit_rate ? Number(vStream.bit_rate) : undefined,
+                    pixFmt: vStream.pix_fmt,
+                    colorSpace: vStream.color_space,
+                    colorTransfer: vStream.color_transfer,
+                    colorPrimaries: vStream.color_primaries,
+                    verifiedFromBitstream: true
+                };
+            }
+
+            if (aStream) {
+                const codecNames = normalizeCodec(aStream.codec_name || 'unknown');
+                rawInfo.audio = {
+                    rawCodec: aStream.codec_name || 'unknown',
+                    normalizedCodec: codecNames.normalizedCodec,
+                    displayCodec: codecNames.displayCodec,
+                    sampleRate: aStream.sample_rate ? Number(aStream.sample_rate) : 0,
+                    channels: aStream.channels || 1,
+                    bitrate: aStream.bit_rate ? Number(aStream.bit_rate) : undefined,
+                    verifiedFromBitstream: true
+                };
+            }
+
+            probeResult.rawInfo = rawInfo;
+            // Even if exitCode was non-zero, if we got valid stream info, we consider it a partial success (valid stream found but it ended abruptly)
+            if (rawInfo.hasVideo) {
+                probeResult.success = true;
+                probeResult.errorCategory = undefined;
+            }
+        }
+    } catch (e) {
+        probeResult.success = false;
+        probeResult.errorCategory = 'invalid_media';
+        probeResult.stderrSummary = `Fallo al parsear JSON de ffprobe: ${(e as Error).message}`;
+    }
+
+    return probeResult;
+}

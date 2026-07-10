@@ -196,22 +196,124 @@ export function createCamerasRouter(
         res.json({ success: true, message: 'Stream stopped' });
     });
 
+    router.get('/:id/preview/frame.jpg', async (req, res) => {
+        try {
+            await cameraService.recordLog(String(req.params.id), 'camera.preview.requested', { type: 'frame' });
+            const streamUrl = await streamController.getStreamUrl(String(req.params.id));
+            await cameraService.recordLog(String(req.params.id), 'camera.preview.url_resolved', { transport: 'tcp' });
+            
+            const ffmpeg = spawn('ffmpeg', [
+                '-hide_banner', '-loglevel', 'error',
+                '-rtsp_flags', 'prefer_tcp',
+                '-timeout', '5000000', // 5s timeout
+                '-i', streamUrl,
+                '-frames:v', '1',
+                '-q:v', '2',
+                '-f', 'image2pipe',
+                '-vcodec', 'mjpeg',
+                'pipe:1'
+            ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+            await cameraService.recordLog(String(req.params.id), 'camera.preview.process_started');
+
+            let stderr = '';
+            let frameBuffer = Buffer.alloc(0);
+
+            ffmpeg.stderr.on('data', chunk => { stderr += chunk.toString(); });
+            ffmpeg.stdout.on('data', chunk => { frameBuffer = Buffer.concat([frameBuffer, chunk]); });
+
+            ffmpeg.once('close', code => {
+                if (code === 0 && frameBuffer.length > 2 && frameBuffer[0] === 0xff && frameBuffer[1] === 0xd8) {
+                    res.setHeader('Content-Type', 'image/jpeg');
+                    res.setHeader('Cache-Control', 'no-store, no-cache');
+                    res.send(frameBuffer);
+                    void cameraService.recordLog(String(req.params.id), 'camera.preview.frame.succeeded');
+                } else {
+                    const message = redactCameraSecrets(stderr.trim());
+                    res.status(502).json({ error: `No se pudo obtener el fotograma. Exit code: ${code}`, details: message });
+                    void cameraService.recordLog(String(req.params.id), 'camera.preview.frame.failed', { exitCode: code, message });
+                }
+            });
+        } catch (error) {
+            res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+        }
+    });
+
     router.get('/:id/preview.mjpeg', async (req, res) => {
         try {
+            await cameraService.recordLog(String(req.params.id), 'camera.preview.requested', { type: 'mjpeg' });
             const streamUrl = await streamController.getStreamUrl(String(req.params.id));
+            await cameraService.recordLog(String(req.params.id), 'camera.preview.url_resolved');
+            
             const boundary = 'scryvexframe';
             res.status(200);
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
             res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
             res.setHeader('Content-Type', `multipart/x-mixed-replace; boundary=${boundary}`);
-            const ffmpeg = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_flags', 'prefer_tcp', '-fflags', '+discardcorrupt', '-analyzeduration', '10000000', '-probesize', '10000000', '-i', streamUrl, '-an', '-vf', 'fps=8', '-q:v', '5', '-f', 'mpjpeg', '-boundary_tag', boundary, 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
+            
+            const ffmpeg = spawn('ffmpeg', [
+                '-hide_banner', '-loglevel', 'error',
+                '-rtsp_flags', 'prefer_tcp',
+                '-timeout', '5000000',
+                '-fflags', '+discardcorrupt',
+                '-i', streamUrl,
+                '-an',
+                '-vf', 'fps=8',
+                '-q:v', '5',
+                '-f', 'mpjpeg',
+                '-boundary_tag', boundary,
+                'pipe:1'
+            ], { stdio: ['ignore', 'pipe', 'pipe'] });
+            
+            await cameraService.recordLog(String(req.params.id), 'camera.preview.process_started');
+            
             let stderr = '';
+            let firstFrameValid = false;
+            let bytesWritten = 0;
+            const startTime = Date.now();
+            let firstPacketTime = 0;
+            let firstFrameTime = 0;
+            
             ffmpeg.stderr.on('data', chunk => { if (stderr.length < 4000) stderr += chunk.toString(); });
-            ffmpeg.stdout.once('data', () => void cameraService.recordLog(String(req.params.id), 'camera.preview.opened'));
-            ffmpeg.stdout.pipe(res);
+            
+            ffmpeg.stdout.on('data', (chunk: Buffer) => {
+                if (firstPacketTime === 0) {
+                    firstPacketTime = Date.now() - startTime;
+                    void cameraService.recordLog(String(req.params.id), 'camera.preview.first_packet', { timeToFirstPacketMs: firstPacketTime });
+                }
+                
+                // Verify real MJPEG stream by checking for JPEG magic bytes inside the first few chunks
+                if (!firstFrameValid) {
+                    if (chunk.includes(Buffer.from([0xff, 0xd8]))) {
+                        firstFrameValid = true;
+                        firstFrameTime = Date.now() - startTime;
+                        void cameraService.recordLog(String(req.params.id), 'camera.preview.first_jpeg', { timeToFirstFrameMs: firstFrameTime });
+                        void cameraService.recordLog(String(req.params.id), 'camera.preview.client_connected');
+                    }
+                }
+                bytesWritten += chunk.length;
+                res.write(chunk);
+            });
+            
             ffmpeg.once('error', error => void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { message: error.message }));
-            ffmpeg.once('exit', code => { if (code && code !== 0) void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { code, message: redactCameraSecrets(stderr.trim()) }); if (!res.writableEnded) res.end(); });
-            res.once('close', () => { if (!ffmpeg.killed) ffmpeg.kill('SIGTERM'); });
+            ffmpeg.once('exit', code => { 
+                const logData = { exitCode: code, bytesWritten, timeToFirstFrameMs: firstFrameTime };
+                if (code && code !== 0) {
+                    void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { ...logData, message: redactCameraSecrets(stderr.trim()) }); 
+                } else if (!firstFrameValid) {
+                    void cameraService.recordLog(String(req.params.id), 'camera.preview.failed', { ...logData, message: 'Stream terminó sin enviar cuadros JPEG reales' });
+                } else {
+                    void cameraService.recordLog(String(req.params.id), 'camera.preview.terminated', logData);
+                }
+                if (!res.writableEnded) res.end(); 
+            });
+            
+            res.once('close', () => { 
+                void cameraService.recordLog(String(req.params.id), 'camera.preview.client_disconnected');
+                if (!ffmpeg.killed) ffmpeg.kill('SIGTERM'); 
+            });
         } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
     });
 
@@ -225,6 +327,103 @@ export function createCamerasRouter(
                 data = await probeService.runProbe(req.params.id);
             }
             res.json(data);
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/:id/capability-evidence', async (req, res) => {
+        try {
+            const camera = await cameraService.findById(req.params.id);
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+            res.json({ cameraId: camera.id, capabilities: camera.capabilities.capabilityEvidence || [] });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/:id/media-analysis', async (req, res) => {
+        try {
+            const camera = await cameraService.findById(req.params.id);
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+            res.json({ cameraId: camera.id, profiles: camera.stream_profiles || [] });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/:id/homekit-compatibility', async (req, res) => {
+        try {
+            const camera = await cameraService.findById(req.params.id);
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+            
+            const { evaluateHomeKitCompatibility } = await import('../hksv/compatibility.js');
+            const matrix = evaluateHomeKitCompatibility(camera.id, camera.stream_profiles || []);
+            res.json({
+                ...matrix,
+                currentMode: camera.config?.hksv_stream_mode || null
+            });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.put('/:id/homekit-stream-mode', async (req, res) => {
+        try {
+            const camera = await cameraService.findById(req.params.id);
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+            const modeConfig = req.body;
+            // Valida el formato básico
+            if (!modeConfig.selectedMode) throw new Error('Falta selectedMode');
+            await cameraService.updateConfig(camera.id, { hksv_stream_mode: modeConfig });
+            res.json({ success: true });
+        } catch (err: any) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+
+    router.post('/:id/diagnostics/rtsp', async (req, res) => {
+        try {
+            const camera = await cameraService.findById(req.params.id);
+            const connection = await cameraService.getConnectionInput(req.params.id);
+            if (!camera || !connection) { res.status(404).json({ error: 'Camera not found' }); return; }
+            
+            const profile = camera.stream_profiles.find(item => item.id === camera.capabilities.video.selectedProfileId) ?? camera.stream_profiles[0];
+            const rawUrl = connection.rtsp_url ?? profile?.streamUri;
+            
+            const stages: any[] = [];
+            
+            if (!rawUrl) {
+                stages.push({ stage: 'url_normalization', success: false, message: 'No hay URL RTSP original' });
+                res.json({ success: false, cameraId: camera.id, profileId: profile?.id, stages });
+                return;
+            }
+
+            const { cameraStreamUrl } = await import('../cameras/camera-adapter.js');
+            const { probeMediaStream } = await import('../media/media-probe.js');
+            
+            let safeUrl: string;
+            try {
+                safeUrl = cameraStreamUrl(connection, rawUrl);
+                stages.push({ stage: 'url_normalization', success: true, message: 'URL normalizada' });
+            } catch (err: any) {
+                stages.push({ stage: 'url_normalization', success: false, message: err.message });
+                res.json({ success: false, cameraId: camera.id, profileId: profile?.id, stages });
+                return;
+            }
+            
+            const probeRes = await probeMediaStream(safeUrl, 10000);
+            stages.push({
+                stage: 'rtsp_probe',
+                success: probeRes.success,
+                transport: probeRes.transportUsed,
+                category: probeRes.errorCategory,
+                exitCode: probeRes.exitCode,
+                durationMs: probeRes.durationMs,
+                message: probeRes.stderrSummary || 'Completado'
+            });
+
+            res.json({ success: probeRes.success && probeRes.rawInfo?.hasVideo, cameraId: camera.id, profileId: profile?.id, stages });
         } catch (err: any) {
             res.status(500).json({ error: err.message });
         }

@@ -1,7 +1,7 @@
 // Shared types between frontend and the BFF layer.
 // Keep these in sync with server/src/api/camera-service.ts
 
-import type { CameraCapabilities, DiscoveryStatus, StreamProfile } from '../cameras/camera-adapter';
+import type { CameraCapabilities, DiscoveryStatus, StreamProfile, CapabilityEvidence } from '../cameras/camera-adapter';
 
 export type CameraProtocol = 'RTSP' | 'ONVIF' | 'OTHER';
 export type CameraStatus   = 'online' | 'offline' | 'unknown';
@@ -37,6 +37,7 @@ export interface Camera {
     discovery_status?: DiscoveryStatus;
     capabilities?: CameraCapabilities;
     stream_profiles?: StreamProfile[];
+    capability_evidence?: CapabilityEvidence[];
     last_probe_at?: string;
     last_error?: string;
 }

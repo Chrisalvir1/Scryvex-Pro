@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import type { Camera } from '../types/camera';
+import type { Camera, CameraLog } from '../types/camera';
+import type { MediaCapabilities } from '../hooks/useMediaCapabilities';
 import { apiUrl, publicAssetUrl } from '../lib/ingress-url';
 
 interface Props {
     cameras: Camera[];
+    capabilities?: MediaCapabilities | null;
     onDelete: (id: string) => Promise<void>;
     onRefresh: () => Promise<void>;
 }
@@ -53,7 +55,7 @@ function getBrandLogo(name: string): string {
     return '';
 }
 
-export function CameraList({ cameras, onDelete, onRefresh }: Props) {
+export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh }: Props) {
     const [selectedId, setSelectedId]     = useState<string | null>(cameras[0]?.id ?? null);
     const [activeTab, setActiveTab]       = useState<ActiveTab>('preview');
     const [deletingId, setDeletingId]     = useState<string | null>(null);
@@ -207,21 +209,6 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-    };
-
-    const handleToggleYolo = async () => {
-        if (!selectedId) return;
-        const currentEnabled = selected?.config?.yolo_enabled === 'true' || selected?.config?.yolo_enabled === true;
-        try {
-            await fetch(apiUrl(`api/cameras/${selectedId}/yolo`), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: !currentEnabled })
-            });
-            await onRefresh();
-        } catch (err) {
-            console.error('Failed to toggle YOLO', err);
-        }
     };
 
     const handleExecuteAction = async (action: 'light' | 'siren', currentState: boolean) => {
@@ -381,6 +368,13 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                             <div className="flex-1 bg-black/20 rounded-b-xl border border-t-0 border-white/10 overflow-hidden relative min-h-[400px]">
                                 {activeTab === 'preview' && (
                                     <div className="absolute inset-0 flex flex-col">
+                                        
+                                        {sysCaps && (!sysCaps.ffmpeg?.usable) && (
+                                            <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 text-center text-xs text-red-400 font-bold z-10">
+                                                FFmpeg no está disponible. El servidor no puede procesar video en vivo para WebRTC ni HKSV Remux.
+                                            </div>
+                                        )}
+
                                         {/* Video area */}
                                         <div className="flex-1 relative bg-black flex items-center justify-center">
                                             {isPlaying ? (
@@ -431,7 +425,8 @@ export function CameraList({ cameras, onDelete, onRefresh }: Props) {
                                                             finally { setStreamLoading(false); }
                                                         }
                                                     }}
-                                                    className={`px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${isPlaying ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-emerald-500 text-white hover:bg-emerald-400'}`}
+                                                    className={`px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${!sysCaps || sysCaps.ffmpeg?.usable ? (isPlaying ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-emerald-500 text-white hover:bg-emerald-400') : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                                                    disabled={sysCaps && (!sysCaps.ffmpeg?.usable)}
                                                 >
                                                     {isPlaying ? '⏹ Detener' : '▶ Reproducir'}
                                                 </button>

@@ -1,6 +1,7 @@
-import { spawn } from 'node:child_process';
-import type { CameraAdapter, CameraConnectionInput, CameraDiscoveryResult, CameraCapabilities, ConnectionTestResult, StreamProfile } from '../camera-adapter';
+import type { CameraAdapter, CameraConnectionInput, CameraDiscoveryResult, CameraCapabilities, ConnectionTestResult, StreamProfile, CapabilityEvidence } from '../camera-adapter';
 import { cameraStreamUrl, emptyCapabilities, redactCameraSecrets } from '../camera-adapter';
+import { probeMediaStream } from '../../media/media-probe';
+import { randomUUID } from 'node:crypto';
 
 function call<T>(run: (callback: (error: Error | null, value: T) => void) => void): Promise<T> {
     return new Promise((resolve, reject) => run((error, value) => error ? reject(error) : resolve(value)));
@@ -11,24 +12,13 @@ function includesCapability(value: unknown, words: string[]) {
     return words.some(word => text.includes(word));
 }
 
-interface ProbeStream { codec_name?: string; codec_long_name?: string; width?: number; height?: number; r_frame_rate?: string; bit_rate?: string; sample_rate?: string; codec_type?: string; }
-
-function runProbe(url: string): Promise<{ streams: ProbeStream[] }> {
-    return new Promise((resolve, reject) => {
-        const child = spawn('ffprobe', ['-v', 'error', '-rtsp_flags', 'prefer_tcp', '-rw_timeout', '20000000', '-analyzeduration', '10000000', '-probesize', '10000000', '-show_streams', '-show_format', '-of', 'json', url], { stdio: ['ignore', 'pipe', 'pipe'] });
-        let stdout = ''; let stderr = '';
-        child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk);
-        child.once('error', reject); child.once('close', code => code === 0 ? resolve(JSON.parse(stdout) as { streams: ProbeStream[] }) : reject(new Error(stderr || `ffprobe terminó con código ${code}`)));
-    });
-}
-
-function fps(value?: string): number | undefined { if (!value) return undefined; const parts = value.split('/'); return parts.length === 2 ? Number(parts[0]) / Number(parts[1]) : Number(value); }
-
 export class OnvifAdapter implements CameraAdapter {
     readonly protocol = 'ONVIF' as const;
 
     async discover(input: CameraConnectionInput): Promise<CameraDiscoveryResult> {
         const capabilities = emptyCapabilities('onvif');
+        const evidence: CapabilityEvidence[] = [];
+
         try {
             const onvif = await import('onvif');
             
@@ -63,78 +53,106 @@ export class OnvifAdapter implements CameraAdapter {
             ]);
 
             const streamProfiles: StreamProfile[] = [];
+            
             for (const [index, profile] of profiles.entries()) {
                 const token = profile?.$?.token;
                 let streamUri: string | undefined;
                 let snapshotUri: string | undefined;
-                try { streamUri = (await call<any>(callback => cam.getStreamUri({ protocol: 'RTSP', profileToken: token }, callback)))?.uri; } catch { /* a profile may not expose RTSP */ }
-                try { snapshotUri = (await call<any>(callback => cam.getSnapshotUri({ profileToken: token }, callback)))?.uri; } catch { /* snapshots are optional */ }
                 
-                const video = profile?.videoEncoderConfiguration ?? profile?.VideoEncoderConfiguration;
-                const audio = profile?.audioEncoderConfiguration ?? profile?.AudioEncoderConfiguration;
-                let codec = video?.encoding ?? video?.Encoding;
-                let audioCodec = audio?.encoding ?? audio?.Encoding;
-                let sampleRate = audio?.sampleRate ?? audio?.SampleRate;
-                let width = video?.resolution?.width ?? video?.Resolution?.Width;
-                let height = video?.resolution?.height ?? video?.Resolution?.Height;
-                let frameRate = video?.rateControl?.frameRateLimit ?? video?.RateControl?.FrameRateLimit;
-                let bitrate = video?.rateControl?.bitrateLimit ?? video?.RateControl?.BitrateLimit;
+                try { streamUri = (await call<any>(callback => cam.getStreamUri({ protocol: 'RTSP', profileToken: token }, callback)))?.uri; } catch { /* ignore */ }
+                try { snapshotUri = (await call<any>(callback => cam.getSnapshotUri({ profileToken: token }, callback)))?.uri; } catch { /* ignore */ }
+                
+                const onvifProfile: StreamProfile = {
+                    id: token ?? `onvif-${index}`,
+                    name: profile?.name ?? profile?.Name,
+                    streamUri,
+                    snapshotUri,
+                };
 
                 // Si hay URL de stream, usamos ffprobe para obtener los valores REALES del hardware
                 if (streamUri) {
-                    try {
-                        const probeUrl = cameraStreamUrl(input, streamUri);
-                        const probe = await runProbe(probeUrl);
-                        const vStream = probe.streams.find(s => s.codec_type === 'video');
-                        const aStreams = probe.streams.filter(s => s.codec_type === 'audio');
+                    const probeUrl = cameraStreamUrl(input, streamUri);
+                    const probe = await probeMediaStream(probeUrl, 10000);
+                    
+                    onvifProfile.validationStatus = probe.success && probe.rawInfo?.hasVideo ? 'valid' : 'invalid';
+                    onvifProfile.validationErrorCategory = probe.errorCategory;
+                    onvifProfile.validationErrorMessage = probe.stderrSummary;
+                    onvifProfile.validationDurationMs = probe.durationMs;
+                    onvifProfile.validationTransport = probe.transportUsed;
+
+                    if (probe.success && probe.rawInfo) {
+                        const raw = probe.rawInfo;
+                        onvifProfile.codec = raw.video?.normalizedCodec;
+                        onvifProfile.rawCodec = raw.video?.rawCodec;
+                        onvifProfile.normalizedCodec = raw.video?.normalizedCodec;
+                        onvifProfile.displayCodec = raw.video?.displayCodec;
+                        onvifProfile.profile = raw.video?.profile;
+                        onvifProfile.level = raw.video?.level;
+                        onvifProfile.width = raw.video?.width;
+                        onvifProfile.height = raw.video?.height;
+                        onvifProfile.fps = raw.video?.fps;
+                        onvifProfile.bitrate = raw.video?.bitrate;
+                        onvifProfile.pixFmt = raw.video?.pixFmt;
+                        onvifProfile.colorSpace = raw.video?.colorSpace;
                         
-                        if (vStream) {
-                            codec = vStream.codec_name?.toUpperCase() ?? codec;
-                            width = vStream.width ?? width;
-                            height = vStream.height ?? height;
-                            frameRate = fps(vStream.r_frame_rate) ?? frameRate;
-                            bitrate = vStream.bit_rate ? Number(vStream.bit_rate) : bitrate;
-                        }
-                        if (aStreams.length > 0) {
-                            for (const aStream of aStreams) {
-                                const ac = aStream.codec_name?.toUpperCase();
-                                const sr = aStream.sample_rate ? Number(aStream.sample_rate) : undefined;
-                                if (ac && !capabilities.audio.codecs.includes(ac)) capabilities.audio.codecs.push(ac);
-                                if (sr && !capabilities.audio.sampleRates.includes(sr)) capabilities.audio.sampleRates.push(sr);
+                        onvifProfile.audioCodec = raw.audio?.normalizedCodec;
+                        onvifProfile.audioSampleRate = raw.audio?.sampleRate;
+                        onvifProfile.audioChannels = raw.audio?.channels;
+                        onvifProfile.audioBitrate = raw.audio?.bitrate;
+                        
+                        // Grabamos la evidencia de que hay audio en el stream RTSP
+                        if (raw.hasAudio) {
+                            if (!capabilities.audio.codecs.includes(raw.audio!.normalizedCodec)) {
+                                capabilities.audio.codecs.push(raw.audio!.normalizedCodec);
+                                capabilities.audio.sampleRates.push(raw.audio!.sampleRate);
+                            }
+                            
+                            // Prevent duplicate evidences across profiles, just add one per stream type
+                            if (!evidence.some(e => e.entity === 'stream_audio' && e.source === 'rtsp')) {
+                                evidence.push({
+                                    entity: 'stream_audio', detected: true, verified: true, readable: true, controllable: false, source: 'rtsp', confidence: 'verified',
+                                    evidence: { codec: raw.audio!.displayCodec, sampleRate: raw.audio!.sampleRate }, lastVerifiedAt: new Date().toISOString()
+                                });
                             }
                         }
-                    } catch (e) {
-                        // ffprobe failed, we fallback to ONVIF XML values
                     }
                 } else {
-                    if (typeof audioCodec === 'string' && !capabilities.audio.codecs.includes(audioCodec.toUpperCase())) capabilities.audio.codecs.push(audioCodec.toUpperCase());
-                    if (typeof sampleRate === 'number' && !capabilities.audio.sampleRates.includes(sampleRate)) capabilities.audio.sampleRates.push(sampleRate);
+                    onvifProfile.validationStatus = 'not_tested';
+                    onvifProfile.validationErrorMessage = 'ONVIF no devolvió una URI RTSP para este perfil.';
                 }
 
-                streamProfiles.push({
-                    id: token ?? `onvif-${index}`,
-                    name: profile?.name ?? profile?.Name,
-                    codec: typeof codec === 'string' ? codec.toUpperCase() : undefined,
-                    width,
-                    height,
-                    fps: frameRate,
-                    bitrate,
-                    streamUri,
-                    snapshotUri,
-                });
+                streamProfiles.push(onvifProfile);
             }
 
+            // --- STRICT CAPABILITY EVALUATION ---
             const ptz = !!(onvifCapabilities?.PTZ ?? onvifCapabilities?.ptz);
+            if (ptz) {
+                evidence.push({ entity: 'ptz', detected: true, verified: true, readable: false, controllable: true, source: 'onvif-device', confidence: 'anunciado', lastVerifiedAt: new Date().toISOString() });
+            }
+
             const events = !!(onvifCapabilities?.Events ?? onvifCapabilities?.events);
-            const audioInput = includesCapability(onvifCapabilities, ['audiosource', 'audioinput']);
-            const audioOutput = includesCapability(onvifCapabilities, ['audiooutput', 'audiodestination']);
-            const relayOrAuxiliary = includesCapability(onvifCapabilities, ['relayoutput', 'auxiliarycommands']);
-            const advertisedLight = includesCapability([onvifCapabilities, services], ['light', 'floodlight', 'illuminator', 'spotlight', 'lamp']);
-            const advertisedSiren = includesCapability([onvifCapabilities, services], ['siren', 'alarm', 'audioalarm']);
-            const detectedEntities = [
-                ...(ptz ? ['ptz'] : []), ...(events ? ['motion_events'] : []), ...(audioInput ? ['microphone'] : []),
-                ...(audioOutput ? ['speaker'] : []), ...(advertisedLight ? ['light'] : []), ...(advertisedSiren ? ['siren'] : []),
-            ];
+            if (events) {
+                evidence.push({ entity: 'motion', detected: true, verified: true, readable: true, controllable: false, source: 'onvif-events', confidence: 'anunciado', lastVerifiedAt: new Date().toISOString() });
+            }
+
+            // Real Relay Checks
+            let relays: any[] = [];
+            try { relays = await call<any[]>(callback => cam.getRelayOutputs(callback)); } catch { /* ignore */ }
+            if (relays.length > 0) {
+                for (const relay of relays) {
+                    evidence.push({ 
+                        entity: 'relay', detected: true, verified: true, readable: true, controllable: true, source: 'onvif-deviceio', confidence: 'verified',
+                        evidence: { token: relay.token || relay.$.token }, lastVerifiedAt: new Date().toISOString() 
+                    });
+                }
+            }
+
+            // Fallbacks based on capabilities string matching (only if we didn't find real relays)
+            const advertisedLight = relays.length === 0 && includesCapability([onvifCapabilities, services], ['light', 'floodlight', 'illuminator', 'spotlight', 'lamp']);
+            const advertisedSiren = relays.length === 0 && includesCapability([onvifCapabilities, services], ['siren', 'alarm', 'audioalarm']);
+            
+            if (advertisedLight) evidence.push({ entity: 'light', detected: true, verified: false, readable: false, controllable: false, source: 'onvif-device', confidence: 'anunciado', lastVerifiedAt: new Date().toISOString() });
+            if (advertisedSiren) evidence.push({ entity: 'siren', detected: true, verified: false, readable: false, controllable: false, source: 'onvif-device', confidence: 'anunciado', lastVerifiedAt: new Date().toISOString() });
 
             capabilities.discoveryStatus = 'online';
             capabilities.lastCheckedAt = new Date().toISOString();
@@ -142,34 +160,43 @@ export class OnvifAdapter implements CameraAdapter {
             capabilities.model = information?.Model ?? information?.model;
             capabilities.firmware = information?.FirmwareVersion ?? information?.firmwareVersion;
             capabilities.serialNumber = information?.SerialNumber ?? information?.serialNumber;
-            capabilities.detectedEntities = detectedEntities;
-            capabilities.video.profiles = streamProfiles;
-            capabilities.video.supportsH264 = streamProfiles.some(profile => profile.codec === 'H264' || profile.codec === 'H.264');
-            capabilities.video.supportsH265 = streamProfiles.some(profile => profile.codec === 'H265' || profile.codec === 'H.265' || profile.codec === 'HEVC');
-            capabilities.video.selectedProfileId = streamProfiles.find(profile => !!profile.streamUri)?.id ?? streamProfiles[0]?.id;
-            capabilities.audio.available = capabilities.audio.codecs.length > 0;
-            capabilities.audio.input = audioInput;
-            capabilities.audio.output = audioOutput;
-            capabilities.controls.microphone = audioInput;
-            capabilities.controls.speaker = audioOutput;
-            capabilities.controls.twoWayAudio = audioInput && audioOutput;
+            capabilities.capabilityEvidence = evidence;
+
+            // En un discovery ONVIF estricto, capabilities.video.profiles SOLO incluye streams con validationStatus == valid
+            const validProfiles = streamProfiles.filter(p => p.validationStatus === 'valid');
+            capabilities.video.profiles = streamProfiles; // Save all, but we pick default from valid
+            capabilities.video.supportsH264 = validProfiles.some(p => p.normalizedCodec === 'H264');
+            capabilities.video.supportsH265 = validProfiles.some(p => p.normalizedCodec === 'H265');
+            
+            // Auto-select safest profile: Valid H264 > Valid H265 > First Valid > First (if none valid)
+            capabilities.video.selectedProfileId = 
+                validProfiles.find(p => p.normalizedCodec === 'H264')?.id ??
+                validProfiles.find(p => p.normalizedCodec === 'H265')?.id ??
+                validProfiles[0]?.id ?? 
+                streamProfiles[0]?.id;
+
+            capabilities.audio.available = evidence.some(e => e.entity === 'stream_audio' && e.verified);
+            
             capabilities.controls.ptz = ptz;
             capabilities.controls.motionEvents = events;
-            // ONVIF exposes relays/auxiliary commands but does not semantically
-            // label them as a light or siren. Preserve that fact without guessing.
-            capabilities.controls.light = advertisedLight;
-            capabilities.controls.lightControl = advertisedLight && relayOrAuxiliary;
-            capabilities.controls.siren = advertisedSiren;
-            capabilities.controls.sirenControl = advertisedSiren && relayOrAuxiliary;
+            
+            // Only light/siren control if we have relays (or explicitly mapped, which happens upstream)
+            capabilities.controls.lightControl = evidence.some(e => (e.entity === 'relay' || e.entity === 'light') && e.controllable);
+            capabilities.controls.sirenControl = evidence.some(e => (e.entity === 'relay' || e.entity === 'siren') && e.controllable);
+            
             capabilities.preview.snapshot = streamProfiles.some(profile => !!profile.snapshotUri);
-            capabilities.preview.rtsp = streamProfiles.some(profile => !!profile.streamUri);
-            capabilities.preview.mjpeg = capabilities.preview.rtsp;
-            capabilities.matter.supportsMatterRemux = capabilities.video.supportsH264 || capabilities.video.supportsH265;
-            capabilities.matter.available = true;
-            capabilities.matter.reason = undefined;
-            // YOLO is available whenever we have a live RTSP stream to consume
-            capabilities.yolo.available = capabilities.preview.rtsp;
-            capabilities.yolo.reason = capabilities.preview.rtsp ? undefined : 'No se detectó un stream RTSP válido';
+            
+            // Only allow preview if at least ONE profile is valid RTSP
+            capabilities.preview.rtsp = validProfiles.length > 0;
+            capabilities.preview.mjpeg = validProfiles.length > 0;
+            capabilities.yolo.available = validProfiles.length > 0;
+            
+            if (validProfiles.length === 0) {
+                capabilities.onvifConnected = true;
+                capabilities.onvifRtspFailureReason = 'ONVIF conectó correctamente, pero FFprobe no pudo abrir los flujos RTSP asociados.';
+                capabilities.yolo.reason = 'El flujo de video RTSP no pudo validarse.';
+            }
+
             return { capabilities, streamProfiles };
         } catch (error) {
             capabilities.discoveryStatus = /unauthorized|authentication|not authorized|401/i.test(error instanceof Error ? error.message : String(error)) ? 'authentication_failed' : 'error';
@@ -178,13 +205,20 @@ export class OnvifAdapter implements CameraAdapter {
         }
     }
 
-    async getCapabilities(input: CameraConnectionInput): Promise<CameraCapabilities> { return (await this.discover(input)).capabilities; }
+    async getCapabilities(input: CameraConnectionInput): Promise<CameraCapabilities> { 
+        return (await this.discover(input)).capabilities; 
+    }
+    
     async testConnection(input: CameraConnectionInput): Promise<ConnectionTestResult> {
-        try { const result = await this.discover(input); return { success: true, status: result.capabilities.discoveryStatus }; }
-        catch (error) { return { success: false, status: (error as { capabilities?: CameraCapabilities }).capabilities?.discoveryStatus ?? 'error', message: error instanceof Error ? error.message : String(error) }; }
+        try { 
+            const result = await this.discover(input); 
+            return { success: true, status: result.capabilities.discoveryStatus }; 
+        } catch (error) { 
+            return { success: false, status: (error as { capabilities?: CameraCapabilities }).capabilities?.discoveryStatus ?? 'error', message: error instanceof Error ? error.message : String(error) }; 
+        }
     }
 
-    async executeAction(input: CameraConnectionInput, action: 'light' | 'siren', state: boolean): Promise<void> {
+    async executeAction(input: CameraConnectionInput, action: 'light' | 'siren' | 'relay', state: boolean, evidence?: CapabilityEvidence): Promise<void> {
         const onvif = await import('onvif');
         const candidates = [...new Set([input.onvif_port ?? input.port, 80, 8080, 8899, 8000, 8001].filter(Boolean))];
         let cam: any;
@@ -202,9 +236,14 @@ export class OnvifAdapter implements CameraAdapter {
         try { relays = await call<any[]>(callback => cam.getRelayOutputs(callback)); } catch (e) { /* ignore */ }
 
         if (relays.length > 0) {
+            // If evidence is provided, use the exact token, else try all relays
+            const tokenToUse = evidence?.evidence?.token as string | undefined;
             let successCount = 0;
+            
             for (const relay of relays) {
                 const token = relay.token || relay.$.token;
+                if (tokenToUse && token !== tokenToUse) continue;
+                
                 const logicalState = state ? 'active' : 'inactive';
                 try {
                     await call<void>(callback => cam.setRelayOutputState({ RelayOutputToken: token, LogicalState: logicalState }, callback));
@@ -215,5 +254,9 @@ export class OnvifAdapter implements CameraAdapter {
         } else {
             throw new Error(`La cámara no expone relevadores (RelayOutputs) vía ONVIF para encender/apagar la ${action === 'light' ? 'luz' : 'sirena'}.`);
         }
+    }
+
+    async startPreview(_input: CameraConnectionInput) {
+        return { sessionId: randomUUID() };
     }
 }

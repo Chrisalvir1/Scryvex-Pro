@@ -3,6 +3,7 @@ import { useScryptedCameras } from './hooks/useScryptedCameras';
 import { CameraList } from './components/CameraList';
 import { AddCameraModal } from './components/AddCameraModal';
 import { PluginStore } from './components/PluginStore';
+import { useMediaCapabilities } from './hooks/useMediaCapabilities';
 import type { CreateCameraInput } from './types/camera';
 
 // ── Connection state indicator ────────────────────────────────────────────────
@@ -24,6 +25,8 @@ export default function App() {
         refetch,
     } = useScryptedCameras();
 
+    const { response: sysResponse, capabilities, refreshCapabilities } = useMediaCapabilities();
+
     const [showAddModal, setShowAddModal] = useState(false);
     const [currentView, setCurrentView] = useState<'cameras' | 'plugins'>('cameras');
 
@@ -35,6 +38,29 @@ export default function App() {
 
     return (
         <div className="min-h-screen bg-[#080c10] text-white">
+
+            {/* ── Diagnostics Banner ────────────────────────────────── */}
+            {sysResponse?.status === 'checking' && (
+                <div className="bg-yellow-500/20 text-yellow-400 px-6 py-2 text-sm font-medium flex items-center justify-center gap-2 border-b border-yellow-500/20">
+                    <span className="w-4 h-4 rounded-full border-2 border-yellow-400 border-t-transparent animate-spin"></span>
+                    Diagnosticando capacidades multimedia (FFmpeg/FFprobe)...
+                </div>
+            )}
+            
+            {(sysResponse?.status === 'degraded' || sysResponse?.status === 'failed') && (
+                <div className="bg-red-500/20 text-red-400 border-b border-red-500/30 px-6 py-3 text-sm flex items-start sm:items-center justify-center gap-3">
+                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5 sm:mt-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                        <span>
+                            <strong>Modo {sysResponse?.status === 'failed' ? 'Crítico' : 'Degradado'}:</strong> Las herramientas de procesamiento de video ({[
+                                !capabilities?.ffmpeg?.usable ? 'FFmpeg' : null,
+                                !capabilities?.ffprobe?.usable ? 'FFprobe' : null
+                            ].filter(Boolean).join(' y ')}) no están disponibles o fallaron. Funciones como Preview, Remux y Transcodificación podrían estar deshabilitadas.
+                        </span>
+                        <button onClick={refreshCapabilities} className="px-3 py-1 bg-red-500/20 hover:bg-red-500/40 rounded transition-colors text-xs font-bold uppercase tracking-wider">Reintentar</button>
+                    </div>
+                </div>
+            )}
 
             {/* ── Header ─────────────────────────────────────────────────── */}
             <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#080c10]/80 backdrop-blur-xl">
@@ -114,6 +140,7 @@ export default function App() {
                 {!loading && (!error || cameras.length === 0) && currentView === 'cameras' && (
                     <CameraList
                         cameras={cameras}
+                        capabilities={capabilities}
                         onDelete={deleteCamera}
                         onRefresh={refetch}
                     />
