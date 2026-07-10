@@ -130,7 +130,7 @@ export function useScryptedCameras(): UseCamerasReturn {
                             )
                         );
                     }
-                } else if (msg.type === 'camera_list_updated' || msg.type === 'cameras.updated') {
+                } else if (msg.type === 'camera_list_updated' || (msg.type as string) === 'cameras.updated') {
                     // Server notified us a camera was added/removed/updated — re-fetch
                     fetchCameras();
                 }

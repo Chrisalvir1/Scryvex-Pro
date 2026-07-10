@@ -1,8 +1,17 @@
 // Shared types between frontend and the BFF layer.
 // Keep these in sync with server/src/api/camera-service.ts
 
-export type CameraProtocol = 'RTSP' | 'ONVIF';
+export type CameraProtocol = 'RTSP' | 'ONVIF' | 'OTHER';
 export type CameraStatus   = 'online' | 'offline' | 'unknown';
+export type DiscoveryStatus = 'pending' | 'discovering' | 'online' | 'offline' | 'authentication_failed' | 'unsupported' | 'error';
+export interface StreamProfile { id: string; name?: string; codec?: string; width?: number; height?: number; fps?: number; bitrate?: number; streamUri?: string; snapshotUri?: string; }
+export interface CameraCapabilities {
+    discoveryStatus: DiscoveryStatus; source: 'onvif' | 'rtsp' | 'integration' | 'manual'; lastCheckedAt?: string; manufacturer?: string; model?: string; firmware?: string; serialNumber?: string;
+    video: { profiles: StreamProfile[]; selectedProfileId?: string; supportsH264: boolean; supportsH265: boolean; supportsTranscoding: boolean };
+    audio: { available: boolean; input: boolean; output: boolean; codecs: string[]; selectedCodec?: string; sampleRates: number[] };
+    controls: { ptz: boolean; light: boolean; lightControl: boolean; microphone: boolean; speaker: boolean; twoWayAudio: boolean; siren: boolean; sirenControl: boolean; motionEvents: boolean };
+    preview: { snapshot: boolean; rtsp: boolean; webrtc: boolean; hls: boolean }; yolo: { available: boolean; reason?: string }; matter: { available: boolean; published: boolean; commissioned: boolean; reason?: string };
+}
 
 export interface Camera {
     id: string;
@@ -31,6 +40,12 @@ export interface Camera {
 
     created_at: string;  // ISO string from JSON
     updated_at: string;
+    adapter_type?: CameraProtocol;
+    discovery_status?: DiscoveryStatus;
+    capabilities?: CameraCapabilities;
+    stream_profiles?: StreamProfile[];
+    last_probe_at?: string;
+    last_error?: string;
 }
 
 export interface CameraEvent {

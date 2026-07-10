@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import type { PluginStatus } from '../types/plugin';
 import { apiUrl, publicAssetUrl } from '../lib/ingress-url';
 
 type Plugin = {

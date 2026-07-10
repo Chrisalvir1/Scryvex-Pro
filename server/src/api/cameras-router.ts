@@ -5,7 +5,6 @@ import { CameraStreamController } from './camera-stream-controller';
 import { CameraProbe } from './camera-probe';
 import { MatterPairingService } from './matter-pairing';
 
-const streamController = new CameraStreamController();
 
 /**
  * Mounts REST endpoints for camera CRUD under /api/cameras.
@@ -17,7 +16,8 @@ export function createCamerasRouter(
     getWsBridge: () => import('./cameras-ws').CamerasWebSocketBridge | undefined
 ): Router {
     const router = Router();
-    const probeService = new CameraProbe(pool);
+    const streamController = new CameraStreamController(cameraService);
+    const probeService = new CameraProbe(cameraService);
     const matterService = new MatterPairingService(pool);
 
     // GET /api/cameras — list all cameras (no passwords returned)
@@ -73,11 +73,23 @@ export function createCamerasRouter(
             const camera = await cameraService.create(body);
             getWsBridge()?.broadcastCamerasUpdated('camera.created', camera.id);
             res.status(201).json({ camera });
+            void probeService.runProbe(camera.id).then(() => getWsBridge()?.broadcastCamerasUpdated('camera.updated', camera.id)).catch(error => console.error('[cameras-router] async discovery failed:', error.message));
         } catch (err: any) {
             console.error('[cameras-router] POST /api/cameras error:', err.message);
             res.status(500).json({ error: 'Failed to create camera', detail: err.message });
         }
     });
+
+    router.post('/:id/discover', async (req, res) => { try { res.json({ capabilities: await probeService.runProbe(req.params.id) }); } catch (err: any) { res.status(502).json({ error: err.message }); } });
+    router.get('/:id/capabilities', async (req, res) => { const camera = await cameraService.findById(req.params.id); if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; } res.json({ capabilities: camera.capabilities, discovery_status: camera.discovery_status, last_error: camera.last_error }); });
+    router.post('/:id/test-connection', async (req, res) => { try { const camera = await cameraService.findById(req.params.id); if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; } const adapter = new CameraProbe(cameraService); const capabilities = await adapter.runProbe(camera.id); res.json({ success: capabilities.discoveryStatus === 'online', status: capabilities.discoveryStatus }); } catch (err: any) { res.status(502).json({ success: false, status: 'error', error: err.message }); } });
+    router.get('/:id/logs', async (req, res) => { res.json({ logs: await cameraService.getLogs(req.params.id) }); });
+    router.delete('/:id/logs', async (req, res) => { await cameraService.clearLogs(req.params.id); res.json({ success: true }); });
+    router.get('/:id/logs/download', async (req, res) => { const logs = await cameraService.getLogs(req.params.id); res.type('text/plain').send(logs.map(log => `[${log.created_at}] ${log.event} ${JSON.stringify(log.metadata)}`).join('\n')); });
+    router.put('/:id/stream-profile', async (req, res) => { try { res.json({ profile: await cameraService.selectStreamProfile(String(req.params.id), String(req.body.profileId)) }); } catch (err: any) { res.status(400).json({ error: err.message }); } });
+    router.put('/:id/audio-profile', async (req, res) => { try { res.json({ codec: await cameraService.selectAudioProfile(String(req.params.id), String(req.body.codec)) }); } catch (err: any) { res.status(400).json({ error: err.message }); } });
+    router.post('/:id/preview/session', async (_req, res) => { res.status(501).json({ error: 'Preview WebRTC/HLS no está disponible; usa /snapshot cuando la cámara lo soporte' }); });
+    router.delete('/:id/preview/session', async (_req, res) => { res.status(501).json({ error: 'No hay sesiones de preview activas' }); });
 
     // DELETE /api/cameras/:id — remove a camera and its events (CASCADE)
     router.delete('/:id', async (req: Request, res: Response) => {
@@ -118,7 +130,7 @@ export function createCamerasRouter(
 
     router.get('/:id/probe', async (req, res) => {
         try {
-            // In a real flow, if data doesn't exist, we run it
+            // Probe data is always discovered from the configured adapter.
             let data = await probeService.getProbeData(req.params.id);
             if (!data) {
                 data = await probeService.runProbe(req.params.id);
@@ -136,6 +148,13 @@ export function createCamerasRouter(
         } catch (err: any) {
             res.status(500).json({ error: err.message });
         }
+    });
+
+    router.get('/:id/snapshot', async (req, res) => {
+        const camera = await cameraService.findById(req.params.id); if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+        const profile = camera.stream_profiles.find(p => p.id === camera.capabilities.video.selectedProfileId) ?? camera.stream_profiles[0];
+        if (profile?.snapshotUri) { try { const response = await fetch(profile.snapshotUri); if (!response.ok) throw new Error(`Snapshot HTTP ${response.status}`); res.type('image/jpeg').send(Buffer.from(await response.arrayBuffer())); return; } catch (error) { await cameraService.recordLog(camera.id, 'camera.snapshot.failed', { error: String(error) }); } }
+        res.status(404).json({ error: 'No hay snapshot disponible para esta cámara' });
     });
 
     // ── Matter Integration Endpoint ────────────────────────────────────────────
@@ -173,21 +192,21 @@ export function createCamerasRouter(
             const cameras = await cameraService.findAll();
             
             // Format cameras strictly matching the Matter object model
-            const matterDevices = cameras.map(cam => ({
+            const matterDevices = cameras.filter(cam => cam.capabilities?.matter?.available).map(cam => ({
                 id: cam.id,
                 deviceType: 'VideoCamera',
                 name: cam.matter_device_name || cam.name,
-                vendorId: cam.matter_vendor_id || 4939,
-                productId: cam.matter_product_id || 2049,
+                vendorId: cam.matter_vendor_id,
+                productId: cam.matter_product_id,
                 endpoints: {
                     video: {
-                        codecs: cam.hksv_codecs || ['H264'],
-                        resolutions: cam.hksv_video_tiers || {},
+                        codecs: cam.capabilities.video.profiles.map(profile => profile.codec).filter(Boolean),
+                        resolutions: cam.capabilities.video.profiles,
                         rtsp_url: cam.rtsp_url
                     },
                     audio: {
-                        codec: cam.hksv_audio_codec || 'Opus',
-                        samplerate: cam.hksv_audio_samplerate || 16
+                        codec: cam.capabilities.audio.codecs,
+                        samplerate: cam.capabilities.audio.sampleRates
                     },
                     networking: {
                         ipv4Address: cam.ip,
@@ -195,7 +214,7 @@ export function createCamerasRouter(
                         forceIpv4: true // Ensures Matter handles Ethernet or Wi-Fi identically via IPv4
                     }
                 },
-                capabilities: cam.hksv_capabilities || {},
+                capabilities: cam.capabilities,
                 status: cam.status
             }));
 
@@ -210,16 +229,9 @@ export function createCamerasRouter(
 
     router.put('/:id/yolo', async (req: Request, res: Response) => {
         try {
-            const { enabled } = req.body;
-            const cameraId = req.params.id;
-            // Update the jsonb config object in postgres to toggle YOLOv10
-            await pool.query(
-                `UPDATE scryvex_core.cameras 
-                 SET config = jsonb_set(COALESCE(config, '{}'::jsonb), '{yolo_enabled}', $1::jsonb) 
-                 WHERE id = $2`,
-                [enabled ? 'true' : 'false', cameraId]
-            );
-            res.json({ success: true, enabled });
+            const camera = await cameraService.findById(String(req.params.id));
+            if (!camera?.capabilities.yolo.available) { res.status(409).json({ available: false, reason: camera?.capabilities.yolo.reason ?? 'Runtime YOLO no disponible en esta arquitectura' }); return; }
+            res.status(501).json({ available: false, reason: 'El detector no está registrado' });
         } catch (err: any) {
             res.status(500).json({ error: err.message });
         }

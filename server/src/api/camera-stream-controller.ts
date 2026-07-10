@@ -1,36 +1,23 @@
 import { EventEmitter } from 'events';
+import { spawn, ChildProcess } from 'node:child_process';
+import { CameraService } from './camera-service';
 
 export class CameraStreamController extends EventEmitter {
-    private streams: Map<string, any> = new Map();
-    private cameraLogs: Map<string, string[]> = new Map();
+    private streams: Map<string, ChildProcess> = new Map();
 
-    constructor() {
-        super();
-    }
+    constructor(private readonly cameraService?: CameraService) { super(); }
 
     private log(cameraId: string, level: string, message: string) {
-        if (!this.cameraLogs.has(cameraId)) {
-            this.cameraLogs.set(cameraId, []);
-        }
         const logEntry = `[${level}] ${message}`;
-        this.cameraLogs.get(cameraId)!.push(logEntry);
         console.log(`[Camera ${cameraId}] ${logEntry}`);
-        
-        // Trim logs to prevent memory leak
-        if (this.cameraLogs.get(cameraId)!.length > 1000) {
-            this.cameraLogs.get(cameraId)!.shift();
-        }
-    }
-
-    getLogs(cameraId: string): string[] {
-        return this.cameraLogs.get(cameraId) || [];
+        void this.cameraService?.recordLog(cameraId, level.toLowerCase(), { message });
     }
 
     async validateCodecCapabilities(cameraId: string, requestedCodec: string): Promise<boolean> {
         this.log(cameraId, 'VALIDATION', `Verifying camera capabilities for codec ${requestedCodec}`);
         
-        // Mocking capability check via SDP/ONVIF parsing
-        const supportedCodecs = ['H.264', 'Opus', 'AAC']; // Example: H.265 not supported
+        const camera = await this.cameraService?.findById(cameraId);
+        const supportedCodecs = [...(camera?.capabilities.video.profiles.map(profile => profile.codec).filter(Boolean) ?? []), ...(camera?.capabilities.audio.codecs ?? [])];
         
         if (!supportedCodecs.includes(requestedCodec)) {
             const errorMsg = `Esta cámara no soporta el codec ${requestedCodec}. Por esta razón, no puedes iniciar el stream de preview y Apple HomeKit no podrá reconocerla.`;
@@ -43,11 +30,10 @@ export class CameraStreamController extends EventEmitter {
         return true;
     }
 
-    async startStream(cameraId: string, requestedCodec: string = 'H.265') {
-        const isValid = await this.validateCodecCapabilities(cameraId, requestedCodec);
-        if (!isValid) {
-            throw new Error(`Codec Validation Failed for ${requestedCodec}`);
-        }
+    async startStream(cameraId: string, requestedCodec?: string) {
+        const camera = await this.cameraService?.findById(cameraId);
+        if (!camera?.rtsp_url) throw new Error('No existe una URL RTSP válida para esta cámara');
+        if (requestedCodec && !(await this.validateCodecCapabilities(cameraId, requestedCodec))) throw new Error(`Codec Validation Failed for ${requestedCodec}`);
 
         if (this.streams.has(cameraId)) {
             this.log(cameraId, 'STREAM', 'Stream is already running.');
@@ -55,19 +41,15 @@ export class CameraStreamController extends EventEmitter {
         }
 
         this.log(cameraId, 'FFMPEG', `Starting on-demand stream for ${cameraId}`);
-        // Mock FFmpeg process startup
-        const mockStreamProcess = {
-            kill: () => {
-                this.log(cameraId, 'FFMPEG', `Stopped on-demand stream for ${cameraId}`);
-            }
-        };
-        this.streams.set(cameraId, mockStreamProcess);
+        const process = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'warning', '-rtsp_transport', 'tcp', '-i', camera.rtsp_url, '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
+        process.stderr?.on('data', data => this.log(cameraId, 'FFMPEG', data.toString().trim()));
+        process.once('exit', () => { this.streams.delete(cameraId); }); this.streams.set(cameraId, process);
     }
 
     stopStream(cameraId: string) {
         const stream = this.streams.get(cameraId);
         if (stream) {
-            stream.kill();
+            stream.kill('SIGTERM');
             this.streams.delete(cameraId);
         } else {
             this.log(cameraId, 'STREAM', 'No active stream found to stop.');

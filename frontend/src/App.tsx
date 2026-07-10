@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useScryptedCameras } from './hooks/useScryptedCameras';
 import { CameraList } from './components/CameraList';
 import { AddCameraModal } from './components/AddCameraModal';

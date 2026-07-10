@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Camera, CameraEvent } from '../types/camera';
 import { publicAssetUrl } from '../lib/ingress-url';
@@ -8,6 +8,7 @@ interface Props {
     events: CameraEvent[];
     onDelete: (id: string) => Promise<void>;
 }
+type ActiveTab = 'preview' | 'logs' | 'info' | 'matter' | 'sensors';
 
 const STATUS_COLORS: Record<Camera['status'], string> = {
     online:  'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
@@ -195,6 +196,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
     };
 
     const selected = cameras.find(c => c.id === selectedId) ?? null;
+    const capabilities = selected?.capabilities;
     const cameraEvents = events.filter(e => e.camera_id === selectedId);
 
     const handleDelete = async (id: string) => {
@@ -326,13 +328,12 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                                         </div>
                                                     ) : (
                                                         <div className="relative w-full h-full bg-slate-900 overflow-hidden flex flex-col items-center justify-center">
-                                                            <span className="text-gray-500 font-mono text-sm">[Video Stream En Vivo]</span>
-                                                            {/* HUD */}
+                                                            <span className="text-gray-500 font-mono text-sm">Preview de stream no disponible en esta fase</span>
+                                                            {/* HUD only displays values discovered by the adapter. */}
                                                             <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 rounded px-3 py-1.5 flex flex-col items-end gap-1 text-[10px] font-mono text-white/80">
-                                                                <div>CODEC: <span className="text-blue-400 font-bold">{selected.codec || 'H.265'}</span></div>
-                                                                <div>RES: <span className="text-emerald-400">1920x1080</span></div>
-                                                                <div>FPS: <span className="text-yellow-400">30</span></div>
-                                                                <div>BITRATE: <span>2.5 Mbps</span></div>
+                                                                <div>CODEC: <span className="text-blue-400 font-bold">{capabilities?.video.profiles[0]?.codec || 'No detectado'}</span></div>
+                                                                <div>RES: <span className="text-emerald-400">{capabilities?.video.profiles[0]?.width && capabilities.video.profiles[0]?.height ? `${capabilities.video.profiles[0].width}x${capabilities.video.profiles[0].height}` : 'No detectada'}</span></div>
+                                                                <div>FPS: <span className="text-yellow-400">{capabilities?.video.profiles[0]?.fps ?? 'No detectados'}</span></div>
                                                             </div>
                                                         </div>
                                                     )}
@@ -360,7 +361,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                                             setIsPlaying(true);
                                                             setStreamLoading(true);
                                                             await fetch(`/api/cameras/${selected.id}/stream/start`, { method: 'POST' });
-                                                            setTimeout(() => setStreamLoading(false), 1500); // Mock loading
+                                                            setStreamLoading(false);
                                                         }
                                                     }}
                                                     className={`px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${isPlaying ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-emerald-500 text-white hover:bg-emerald-400'}`}
@@ -378,25 +379,25 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                             </div>
 
                                             <div className="flex gap-2">
-                                                <button 
+                                                {capabilities?.controls.microphone && <button
                                                     disabled={!isPlaying}
                                                     onClick={() => setMicActive(!micActive)}
                                                     className={`px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${micActive ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-white/5 text-gray-400 hover:bg-white/10'} disabled:opacity-30`}
                                                 >
                                                     🎤 Mic
-                                                </button>
-                                                <button 
+                                                </button>}
+                                                {capabilities?.controls.lightControl && <button
                                                     onClick={() => setLightActive(!lightActive)}
                                                     className={`px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${lightActive ? 'bg-yellow-400/20 text-yellow-400 border border-yellow-400/30' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
                                                 >
                                                     💡 Luz
-                                                </button>
-                                                <button 
+                                                </button>}
+                                                {capabilities?.controls.sirenControl && <button
                                                     onClick={() => setSirenActive(!sirenActive)}
                                                     className={`px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${sirenActive ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
                                                 >
                                                     🚨 Sirena
-                                                </button>
+                                                </button>}
                                             </div>
                                         </div>
                                     </div>
@@ -463,12 +464,12 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                 <>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                         {[
-                                            ['Video Codec', probeData?.video_codec || selected.codec || '—'],
-                                            ['Resolución', probeData ? `${probeData.width}×${probeData.height}` : '—'],
-                                            ['FPS', probeData ? probeData.r_frame_rate : '—'],
-                                            ['Bitrate Video', probeData ? `${(probeData.bit_rate / 1000000).toFixed(1)} Mbps` : '—'],
-                                            ['Audio Codec', probeData ? `${probeData.audio_codec} → Opus` : '—'],
-                                            ['Audio Sample', probeData ? `${probeData.audio_sample_rate / 1000} kHz` : '—'],
+                                            ['Video Codec', capabilities?.video.profiles[0]?.codec || 'No detectado'],
+                                            ['Resolución', capabilities?.video.profiles[0]?.width && capabilities.video.profiles[0]?.height ? `${capabilities.video.profiles[0].width}×${capabilities.video.profiles[0].height}` : 'No detectada'],
+                                            ['FPS', capabilities?.video.profiles[0]?.fps ?? 'No detectados'],
+                                            ['Bitrate Video', capabilities?.video.profiles[0]?.bitrate ? `${(capabilities.video.profiles[0].bitrate / 1000000).toFixed(1)} Mbps` : 'No detectado'],
+                                            ['Audio Codec', capabilities?.audio.codecs.join(', ') || 'No detectado'],
+                                            ['Audio Sample', capabilities?.audio.sampleRates.map(rate => `${rate / 1000} kHz`).join(', ') || 'No detectado'],
                                         ].map(([k, v]) => (
                                             <div key={k} className="bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">
                                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">{k}</p>
@@ -478,31 +479,31 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                     </div>
 
                                     <div className="bg-black/30 border border-white/10 rounded-xl p-4 mt-2">
-                                        <h4 className="text-sm font-bold text-white mb-3">Opciones de Transcodificación HKSV</h4>
+                                        <h4 className="text-sm font-bold text-white mb-3">Capacidades detectadas</h4>
                                         <div className="space-y-4">
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-sm text-gray-300">Remux H.264 (Sin transcodificar)</p>
-                                                    <p className="text-xs text-gray-500">Envía el stream directo si la cámara es H.264</p>
+                                                <p className="text-sm text-gray-300">H.264</p>
+                                                <p className="text-xs text-gray-500">{capabilities?.video.supportsH264 ? 'Detectado' : 'No detectado'}</p>
                                                 </div>
-                                                <div className="text-emerald-400 font-bold text-sm bg-emerald-500/10 px-2 py-1 rounded">✅ Soportado</div>
+                                                <div className="text-gray-400 font-bold text-sm bg-white/5 px-2 py-1 rounded">{capabilities?.video.supportsH264 ? '✅ Detectado' : '—'}</div>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-sm text-gray-300">Remux H.265 (Crudo a HomeKit)</p>
-                                                    <p className="text-xs text-gray-500">Requiere iOS 17+. Sin latencia de FFmpeg.</p>
+                                                <p className="text-sm text-gray-300">H.265</p>
+                                                <p className="text-xs text-gray-500">{capabilities?.video.supportsH265 ? 'Detectado' : 'No detectado'}</p>
                                                 </div>
-                                                <div className="text-emerald-400 font-bold text-sm bg-emerald-500/10 px-2 py-1 rounded">✅ Soportado</div>
+                                                <div className="text-gray-400 font-bold text-sm bg-white/5 px-2 py-1 rounded">{capabilities?.video.supportsH265 ? '✅ Detectado' : '—'}</div>
                                             </div>
                                             <div className="flex items-center justify-between pt-2 border-t border-white/5">
                                                 <div>
-                                                    <p className="text-sm text-gray-300 font-semibold">Forzar HEVC (H.265) a máxima resolución</p>
-                                                    <p className="text-xs text-gray-500">Si la cámara lo permite, cambia su perfil a alta calidad H.265.</p>
+                                                <p className="text-sm text-gray-300 font-semibold">Perfil H.265 seleccionado</p>
+                                                <p className="text-xs text-gray-500">Solo se habilita cuando el adaptador detecta H.265.</p>
                                                 </div>
                                                 <button
                                                     onClick={handleToggleHEVC}
-                                                    disabled={!probeData}
-                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${probeData?.hevc_enabled ? 'bg-blue-600' : 'bg-gray-600'}`}
+                                                    disabled={!capabilities?.video.supportsH265}
+                                                    className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-gray-600 disabled:opacity-40"
                                                 >
                                                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${probeData?.hevc_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                                                 </button>
@@ -577,7 +578,9 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                     </div>
                                     
                                     <div className="w-full md:w-64 bg-white rounded-xl p-4 flex flex-col items-center justify-center">
-                                        {matterPairing ? (
+                                        {matterStatus?.status === 'unavailable' ? (
+                                            <p className="text-sm text-gray-500 text-center">Matter no disponible: {matterStatus.reason}</p>
+                                        ) : matterPairing ? (
                                             <>
                                                 <QRCodeSVG value={matterPairing.qrCode} size={200} />
                                                 <p className="text-black font-mono font-bold mt-4 tracking-widest text-lg">
@@ -591,7 +594,8 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                         ) : (
                                             <button 
                                                 onClick={handleGeneratePairing}
-                                                className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors"
+                                                disabled={matterStatus?.status !== 'available'}
+                                                className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40"
                                             >
                                                 Generar Código
                                             </button>
@@ -626,9 +630,10 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                 </div>
                                 <button
                                     onClick={handleToggleYolo}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${(selected.config?.yolo_enabled === 'true' || selected.config?.yolo_enabled === true) ? 'bg-purple-600' : 'bg-gray-600'}`}
+                                    disabled={!capabilities?.yolo.available}
+                                    className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-gray-600 disabled:opacity-40"
                                 >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${(selected.config?.yolo_enabled === 'true' || selected.config?.yolo_enabled === true) ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1" />
                                 </button>
                             </div>
                             
