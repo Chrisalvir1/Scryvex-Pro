@@ -64,13 +64,34 @@ export interface DeviceControlProvider {
     executeCapability?(deviceId: string, capabilityId: string, payload: unknown, signal?: AbortSignal): Promise<void>;
 }
 
+export type MediaErrorCategory =
+    | 'dns_error'
+    | 'connection_refused'
+    | 'connection_timeout'
+    | 'authentication_failed'
+    | 'expired_source'
+    | 'rtsp_404'
+    | 'rtsp_454_session_not_found'
+    | 'rtsp_461_transport_unsupported'
+    | 'malformed_uri'
+    | 'malformed_source'
+    | 'invalid_media'
+    | 'no_video_stream'
+    | 'unsupported_codec'
+    | 'unsupported_transport'
+    | 'process_spawn_failed'
+    | 'process_timeout'
+    | 'cancelled'
+    | 'not_retryable'
+    | 'unknown';
+
 /**
  * Typed error for media operations, to support retry logic without string parsing.
  */
 export class MediaOperationError extends Error {
     constructor(
         message: string,
-        public readonly category: 'authentication_failed' | 'expired_source' | 'not_retryable' | 'cancelled' | 'timeout' | 'unknown',
+        public readonly category: MediaErrorCategory,
         public readonly isIdempotent: boolean = false,
         public readonly statusCode?: number
     ) {

@@ -42,12 +42,8 @@ export class MediaSourceSessionManager {
                 const isRetryableAuthError = 
                     e instanceof MediaOperationError && 
                     (e.category === 'authentication_failed' || e.category === 'expired_source');
-                    
-                const isRetryableStringError = 
-                    ! (e instanceof MediaOperationError) && 
-                    (e.message?.includes('401') || e.message?.includes('403') || e.message?.includes('unauthorized'));
 
-                if ((isRetryableAuthError || isRetryableStringError) && attempt < maxAttempts) {
+                if (isRetryableAuthError && attempt < maxAttempts) {
                     console.log(`[SessionManager] Retryable auth error on ${deviceId}/${sourceId}. Forcing refresh (Attempt ${attempt})...`);
                     this.invalidateSession(deviceId, sourceId);
                     // The next loop iteration will call getValidDescriptor which will trigger a forceRefresh

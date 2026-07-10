@@ -42,9 +42,7 @@ export class RtspAdapter implements CameraMediaProvider, DeviceControlProvider {
             sourceType: 'rtsp',
             transport: 'tcp',
             deviceId,
-            // sourceLocatorRef holds the raw URI — credentials are NOT embedded here
-            sourceLocatorRef: config.rtsp_url,
-            // credentialRef is the deviceId; SessionManager uses it to call ConnectionSecretStore
+            sourceLocatorRef: `camera:${deviceId}:rtsp:primary`,
             credentialRef: deviceId,
         };
 

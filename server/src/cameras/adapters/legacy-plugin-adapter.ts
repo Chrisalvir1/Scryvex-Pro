@@ -74,7 +74,7 @@ export class LegacyPluginMediaProviderAdapter implements CameraMediaProvider, De
 }
 
 export class PluginMediaObjectResolver implements MediaInputResolver {
-    constructor(private host: LegacyPluginHost) {}
+    constructor(private pluginHost: LegacyPluginHost, private mediaManager: any) {}
 
     canResolve(descriptor: MediaSourceDescriptor): boolean {
         return descriptor.sourceType === 'plugin_buffer' || descriptor.sourceType === 'plugin_pipe';
@@ -87,51 +87,20 @@ export class PluginMediaObjectResolver implements MediaInputResolver {
     ): Promise<ResolvedMediaInput> {
         if (signal?.aborted) throw new Error('Aborted');
         
-        const device = this.host.getDevice(descriptor.deviceId);
+        const device = this.pluginHost.getDevice(descriptor.deviceId);
         if (!device || !device.getVideoStream) {
             throw new Error(`Device ${descriptor.deviceId} does not support getVideoStream`);
         }
         
-        // This simulates requesting the actual media object from the legacy plugin
-        const media = await device.getVideoStream();
-        // media might be { mimeType: 'url', data: 'http...' } or { mimeType: 'buffer', data: Buffer }
-        
-        if (media.mimeType && media.mimeType.includes('rtsp')) {
-            return {
-                kind: 'rtsp',
-                ffmpegInputArguments: ['-i', media.data],
-                probeStrategy: 'ffprobe',
-                redactedDescription: `PluginMedia[${descriptor.pluginId}] RTSP`
-            };
-        }
+        const mediaObject = await device.getVideoStream();
+        const buffer = await this.mediaManager.convertMediaObjectToBuffer(mediaObject, 'image/jpeg');
 
-        if (Buffer.isBuffer(media.data)) {
-            return {
-                kind: 'buffer',
-                ffmpegInputArguments: ['-i', 'pipe:0'], 
-                probeStrategy: 'buffer_magic',
-                redactedDescription: `PluginMedia[${descriptor.pluginId}] Buffer`,
-                mimeType: media.mimeType,
-                inputBuffer: media.data
-            };
-        }
-        
-        if (media.data && typeof media.data.pipe === 'function') {
-            return {
-                kind: 'pipe',
-                ffmpegInputArguments: ['-i', 'pipe:0'], 
-                probeStrategy: 'buffer_magic',
-                redactedDescription: `PluginMedia[${descriptor.pluginId}] Pipe`,
-                mimeType: media.mimeType,
-                inputStream: media.data,
-                cleanup: async () => {
-                    if (typeof media.data.destroy === 'function') {
-                        media.data.destroy();
-                    }
-                }
-            };
-        }
-        
-        throw new Error(`Unsupported MediaObject mimeType/data format from plugin ${descriptor.pluginId}`);
+        return {
+            kind: 'buffer',
+            inputBuffer: buffer,
+            probeStrategy: 'buffer_magic',
+            ffmpegInputArguments: ['-i', 'pipe:0'],
+            redactedDescription: `plugin: ${descriptor.pluginId} stream for ${descriptor.deviceId}`,
+        };
     }
 }

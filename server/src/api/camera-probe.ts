@@ -21,9 +21,10 @@ export class CameraProbe {
 
     private deriveLegacyCameraCapabilities(
         evidence: CapabilityEvidence[],
-        profiles: StreamProfile[]
+        probedSources: ProbedMediaSource[]
     ): Partial<CameraCapabilities> {
-        const validVideoProfiles = profiles.filter(p => p.validationStatus === 'valid' && p.normalizedCodec);
+        const validSources = probedSources.filter(s => s.profile.validationStatus === 'valid' && s.profile.normalizedCodec);
+        const validVideoProfiles = validSources.map(s => s.profile);
 
         const hasH264 = validVideoProfiles.some(p => p.normalizedCodec === 'H264');
         const hasH265 = validVideoProfiles.some(p => p.normalizedCodec === 'H265');
@@ -51,7 +52,7 @@ export class CameraProbe {
                 motionEvents: evidence.some(e => e.entity === 'motion' && e.readable),
             },
             video: {
-                profiles,
+                profiles: probedSources.map(s => s.profile),
                 supportsH264: hasH264,
                 supportsH265: hasH265,
                 supportsTranscoding: false,
@@ -64,13 +65,13 @@ export class CameraProbe {
                 codecs: [...new Set(validVideoProfiles.map(p => p.audioCodec).filter(Boolean) as string[])],
                 sampleRates: [...new Set(validVideoProfiles.map(p => p.audioSampleRate).filter(Boolean) as number[])],
             },
-            // B5: preview capabilities derived from real validated profiles
+            // B5: preview capabilities derived from real validated sources (sourceType)
             preview: {
-                snapshot: validVideoProfiles.length > 0,
-                rtsp: validVideoProfiles.length > 0,
-                mjpeg: validVideoProfiles.length > 0,
-                webrtc: false,
-                hls: validVideoProfiles.some(p => p.validationStatus === 'valid'),
+                snapshot: validSources.some(s => s.descriptor.sourceType === 'http') || validVideoProfiles.length > 0,
+                rtsp: validSources.some(s => s.descriptor.sourceType === 'rtsp'),
+                mjpeg: validSources.some(s => s.descriptor.sourceType === 'http' && s.profile.normalizedCodec === 'MJPEG') || validVideoProfiles.length > 0,
+                webrtc: validSources.some(s => s.descriptor.sourceType === 'webrtc'),
+                hls: validSources.some(s => s.descriptor.sourceType === 'hls'),
                 remux: canRemux,
             },
         };
@@ -165,7 +166,7 @@ export class CameraProbe {
             const errorMessage = hasValidVideo ? undefined : 'Ningún perfil de video fue validado correctamente';
 
             const hkMatrix = evaluateHomeKitCompatibility(cameraId, profiles);
-            const legacyDerived = this.deriveLegacyCameraCapabilities(evidence, profiles);
+            const legacyDerived = this.deriveLegacyCameraCapabilities(evidence, probedSources);
 
             const newCapabilities: CameraCapabilities = {
                 // B5: conditional status
@@ -233,23 +234,47 @@ export class CameraProbe {
         // Sources are not re-probed here — just materialized from the last probe run.
         const discovery = await (await this.providerRegistry.getProviderForCamera(cameraId)).getMediaSources(cameraId);
 
-        return camera.stream_profiles.map(profile => {
+        const result: ProbedMediaSource[] = [];
+        let staleDetected = false;
+
+        for (const profile of camera.stream_profiles) {
             const descriptor = discovery.sources.find(s => s.id === profile.id);
-            return {
-                descriptor: descriptor ?? {
-                    id: profile.id,
-                    sourceType: 'rtsp',
-                    transport: 'tcp',
-                    deviceId: cameraId,
-                    sourceLocatorRef: profile.id,
-                    credentialRef: cameraId,
-                },
+            if (!descriptor) {
+                // Task 4: marcar stale y deseleccionar
+                profile.validationStatus = 'stale';
+                staleDetected = true;
+                if (camera.capabilities?.video?.selectedProfileId === profile.id) {
+                    camera.capabilities.video.selectedProfileId = undefined;
+                }
+                continue;
+            }
+
+            result.push({
+                descriptor,
                 profile,
                 probeSucceeded: profile.validationStatus === 'valid',
                 probeErrorCategory: profile.validationErrorCategory,
                 probeDurationMs: profile.validationDurationMs,
-            } as ProbedMediaSource;
-        });
+            });
+        }
+
+        if (staleDetected) {
+            // Actualizar DB con el perfil stale deseleccionado
+            await this.cameraService.updateDiscovery(
+                cameraId,
+                camera.discovery_status as any,
+                camera.capabilities,
+                camera.stream_profiles,
+                undefined
+            );
+            
+            // Background re-probe
+            setTimeout(() => {
+                this.runProbe(cameraId).catch(err => console.error('Re-probe failed:', err));
+            }, 0);
+        }
+
+        return result;
     }
 
     async getProbeData(cameraId: string): Promise<CameraCapabilities | null> {

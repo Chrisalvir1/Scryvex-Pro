@@ -269,7 +269,7 @@ describe('executeWithSourceRetry', () => {
 
         const result = await manager.executeWithSourceRetry('cam1', 'src1', async (_input) => {
             callCount++;
-            if (callCount === 1) throw new Error('401 Unauthorized');
+            if (callCount === 1) throw new MediaOperationError('401 Unauthorized', 'authentication_failed');
             return 'success';
         });
 
@@ -406,5 +406,48 @@ describe('Canary secrets', () => {
         const desc = makeSrc({ sourceLocatorRef: 'rtsp://10.0.0.1/stream' });
         const result = await registry.resolve(desc, store);
         assert.ok(!result.redactedDescription.includes('hunter2'), 'password must not appear in redactedDescription');
+    });
+});
+
+// ── Legacy Plugins ────────────────────────────────────────────────────────────
+
+describe('Legacy Plugins', () => {
+    it('LegacyPluginMediaProviderAdapter provides source and PluginMediaObjectResolver resolves it', async () => {
+        const { LegacyPluginMediaProviderAdapter, PluginMediaObjectResolver } = require('../src/cameras/adapters/legacy-plugin-adapter');
+        const mockHost = {
+            getDevice: (id: string) => {
+                if (id !== 'cam1') return null;
+                return {
+                    getVideoStream: async () => 'mock_media_object',
+                    interfaces: ['OnOff'],
+                    type: 'Light',
+                };
+            }
+        };
+
+        const provider = new LegacyPluginMediaProviderAdapter(mockHost, 'test-plugin');
+        const capabilities = await provider.listCapabilities('cam1');
+        assert.ok(capabilities.some((c: any) => c.entity === 'light'));
+
+        const discovery = await provider.getMediaSources('cam1');
+        assert.equal(discovery.sources.length, 1);
+        const desc = discovery.sources[0];
+        assert.equal(desc.sourceType, 'plugin_buffer');
+
+        const mockMediaManager = {
+            convertMediaObjectToBuffer: async (obj: any, mimeType: string) => {
+                assert.equal(obj, 'mock_media_object');
+                assert.equal(mimeType, 'image/jpeg');
+                return Buffer.from('jpeg_data');
+            }
+        };
+
+        const resolver = new PluginMediaObjectResolver(mockHost, mockMediaManager);
+        const resolved = await resolver.resolve(desc, new MockSecretStore({ type: 'none' }));
+
+        assert.equal(resolved.kind, 'buffer');
+        if (resolved.kind === 'buffer') {
+            assert.equal(resolved.inputBuffer!.toString(), 'jpeg_data');
+        }
     });
 });

@@ -18,9 +18,13 @@ export interface MediaProcessOptions {
     signal?: AbortSignal;
     inputStream?: Readable;
     inputBuffer?: Buffer;
-    onStdout?: (chunk: Buffer) => void;
+    /** If provided, stdout is piped here and maxStdoutBytes is ignored. Backpressure is handled automatically. */
+    outputStream?: NodeJS.WritableStream;
+    /** Raw callback, ignores maxStdoutBytes if provided. If it returns false, you must handle resume() manually or provide outputStream instead. */
+    onStdout?: (chunk: Buffer) => boolean | void;
     onStderr?: (chunk: Buffer) => void;
 }
+
 
 export interface MediaProcessResult {
     exitCode: number | null;
@@ -45,10 +49,12 @@ const DEFAULT_MAX_STDERR = 64 * 1024;         // 64 KiB
 const SIGKILL_GRACE_MS   = 3_000;
 
 function killGracefully(child: ChildProcess): void {
-    if (child.killed || child.exitCode !== null) return;
+    if (child.exitCode !== null) return; // Process already exited
     child.kill('SIGTERM');
     const t = setTimeout(() => {
-        if (!child.killed && child.exitCode === null) child.kill('SIGKILL');
+        // child.killed only means a signal was sent, not that it died.
+        // We must check exitCode to know if it's still running.
+        if (child.exitCode === null) child.kill('SIGKILL');
     }, SIGKILL_GRACE_MS);
     if (t.unref) t.unref();
 }
@@ -84,21 +90,31 @@ export class DefaultMediaProcessRunner implements IMediaProcessRunner {
         let killedForSize = false;
         const stdoutChunks: Buffer[] = [];
 
-        child.stdout?.on('data', (chunk: Buffer) => {
-            stdoutBytes += chunk.length;
-            if (stdoutBytes > maxStdout) {
-                if (!killedForSize) {
-                    killedForSize = true;
-                    killGracefully(child);
+        if (options.outputStream) {
+            // Native pipe handles backpressure automatically
+            child.stdout?.pipe(options.outputStream, { end: false });
+        } else if (child.stdout) {
+            child.stdout.on('data', (chunk: Buffer) => {
+                if (options.onStdout) {
+                    const canContinue = options.onStdout(chunk);
+                    // Si onStdout devuelve false explícitamente y tenemos acceso al stream subyacente (asumiendo EventEmitter), pausamos
+                    // Lo ideal es que el usuario pase outputStream en su lugar para delegar esto a Node.
+                    if (canContinue === false) {
+                        child.stdout?.pause();
+                    }
+                } else {
+                    stdoutBytes += chunk.length;
+                    if (stdoutBytes > maxStdout) {
+                        if (!killedForSize) {
+                            killedForSize = true;
+                            killGracefully(child);
+                        }
+                        return;
+                    }
+                    stdoutChunks.push(chunk);
                 }
-                return;
-            }
-            if (options.onStdout) {
-                options.onStdout(chunk);
-            } else {
-                stdoutChunks.push(chunk);
-            }
-        });
+            });
+        }
 
         // ── stderr ────────────────────────────────────────────────────────────
         let stderrRaw = '';
@@ -134,7 +150,11 @@ export class DefaultMediaProcessRunner implements IMediaProcessRunner {
 
         // ── promise ───────────────────────────────────────────────────────────
         const promise = new Promise<MediaProcessResult>((resolve) => {
+            let settled = false;
             const finish = (code: number | null) => {
+                if (settled) return;
+                settled = true;
+
                 if (timer) clearTimeout(timer);
                 options.signal?.removeEventListener('abort', abortHandler);
 

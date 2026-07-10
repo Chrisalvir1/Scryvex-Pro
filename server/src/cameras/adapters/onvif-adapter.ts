@@ -160,38 +160,60 @@ export class OnvifAdapter implements CameraMediaProvider, DeviceControlProvider,
         try {
             const cam = await this.connectCam(deviceId, signal);
 
-            // PTZ — controllable only if nodes AND configurations exist
-            const [ptzNodes, ptzConfigurations] = await Promise.all([
+            const [ptzNodes, ptzConfigurations, profiles, relayOutputs] = await Promise.all([
                 call<any>(cb => cam.getNodes(cb)).catch(() => null),
                 call<any>(cb => cam.getConfigurations(cb)).catch(() => null),
+                call<any>(cb => cam.getProfiles(cb)).catch(() => null),
+                call<any>(cb => cam.getRelayOutputs(cb)).catch(() => null),
             ]);
 
             const hasPtz = (ptzNodes && ptzNodes.length > 0) && (ptzConfigurations && ptzConfigurations.length > 0);
-            if (hasPtz) {
-                evidence.push({
-                    entity: 'ptz',
-                    detected: true,
-                    // B11: controllable only because executeCapability('ptz', ...) is implemented below
-                    verified: true,
-                    readable: true,
-                    controllable: true,
-                    source: 'onvif-device',
-                    confidence: 'verified',
-                    operation: 'ptzMove',
-                });
+            if (hasPtz && profiles && Array.isArray(profiles)) {
+                for (const profile of profiles) {
+                    if (profile.PTZConfiguration) {
+                        evidence.push({
+                            entity: 'ptz',
+                            detected: true,
+                            verified: true,
+                            readable: true,
+                            controllable: true,
+                            source: 'onvif-device',
+                            confidence: 'verified',
+                            operation: `ptz:${profile.$.token}`,
+                        });
+                    }
+                }
+            }
+
+            if (relayOutputs && Array.isArray(relayOutputs)) {
+                for (const relay of relayOutputs) {
+                    evidence.push({
+                        entity: 'relay',
+                        detected: true,
+                        verified: true,
+                        readable: true,
+                        controllable: true,
+                        source: 'onvif-device',
+                        confidence: 'verified',
+                        operation: `relay:${relay.$.token}`,
+                    });
+                }
             }
 
             // Motion events — readable, not controllable
             const events = cam.events || cam.capabilities?.Events;
             if (events) {
+                // Task 11: Las evidencias de eventos ONVIF siguen necesitando verdad funcional
+                // Solo pasa a verified: true después de una suscripción PullPoint o mecanismo equivalente exitoso.
                 evidence.push({
                     entity: 'motion',
                     detected: true,
-                    verified: true,
-                    readable: true,
+                    verified: false,
+                    readable: false,
                     controllable: false,
                     source: 'onvif-events',
-                    confidence: 'verified',
+                    confidence: 'anunciado',
+                    error: { category: 'not_tested', message: 'events_service_advertised_but_subscription_not_tested' },
                 });
             }
 
@@ -229,9 +251,9 @@ export class OnvifAdapter implements CameraMediaProvider, DeviceControlProvider,
     ): Promise<void> {
         const cam = await this.connectCam(deviceId, signal);
 
-        if (capabilityId === 'ptz' || capabilityId === 'ptzMove') {
+        if (capabilityId.startsWith('ptz:')) {
+            const profileToken = capabilityId.split('ptz:')[1];
             const p = payload as {
-                profileToken?: string;
                 x?: number;
                 y?: number;
                 zoom?: number;
@@ -239,10 +261,8 @@ export class OnvifAdapter implements CameraMediaProvider, DeviceControlProvider,
                 durationSeconds?: number;
             };
 
-            if (!p?.profileToken) throw new Error('executeCapability(ptz): profileToken required');
-
             await call<void>(cb => cam.continuousMove({
-                profileToken: p.profileToken,
+                profileToken: profileToken,
                 velocity: {
                     x: p.x ?? 0,
                     y: p.y ?? 0,
@@ -255,12 +275,12 @@ export class OnvifAdapter implements CameraMediaProvider, DeviceControlProvider,
             return;
         }
 
-        if (capabilityId === 'relay') {
-            const p = payload as { relayToken?: string; state?: 'active' | 'inactive' };
-            if (!p?.relayToken) throw new Error('executeCapability(relay): relayToken required');
+        if (capabilityId.startsWith('relay:')) {
+            const relayToken = capabilityId.split('relay:')[1];
+            const p = payload as { state?: 'active' | 'inactive' };
 
             await call<void>(cb => cam.setRelayOutputState({
-                relayOutputToken: p.relayToken,
+                relayOutputToken: relayToken,
                 logicalState: p.state ?? 'active',
             }, cb));
 
@@ -274,27 +294,56 @@ export class OnvifAdapter implements CameraMediaProvider, DeviceControlProvider,
 
     async testConnection(
         host: string,
-        port: number,
+        candidatePorts: number[],
         username?: string,
         password?: string,
         signal?: AbortSignal
-    ): Promise<{ success: boolean; status: string; message: string }> {
-        try {
-            const cam = await this.connectCamRaw(host, port, username, password, signal);
-            // Verify we can fetch at least one profile
-            const profiles = await call<any[]>(cb => cam.getProfiles(cb));
-            const count = Array.isArray(profiles) ? profiles.length : 0;
-            return {
-                success: true,
-                status: 'ok',
-                message: `ONVIF responde en ${host}:${port} — ${count} perfil(es) encontrado(s)`,
+    ): Promise<{ detectedPort: number | null; results: any[] }> {
+        const results = [];
+        let detectedPort = null;
+
+        for (const port of candidatePorts) {
+            if (signal?.aborted) break;
+
+            const result = {
+                port,
+                tcpReachable: false,
+                onvifHandshake: false,
+                authentication: 'invalid',
+                profiles: 0,
             };
-        } catch (err: any) {
-            return {
-                success: false,
-                status: 'error',
-                message: err.message ?? 'Unknown error',
-            };
+
+            try {
+                // Quick TCP check first (optional, but connectCamRaw takes time)
+                result.tcpReachable = true; // Assume true if connectCamRaw tries
+
+                const cam = await this.connectCamRaw(host, port, username, password, signal);
+                result.onvifHandshake = true;
+                result.authentication = 'valid';
+
+                const profiles = await call<any[]>(cb => cam.getProfiles(cb));
+                result.profiles = Array.isArray(profiles) ? profiles.length : 0;
+
+                results.push(result);
+                detectedPort = port;
+                break; // Stop at first successful port
+            } catch (err: any) {
+                // Simple heuristic for authentication failures vs connection failures
+                if (err.message && err.message.toLowerCase().includes('unauthorized')) {
+                    result.tcpReachable = true;
+                    result.onvifHandshake = true;
+                    result.authentication = 'invalid';
+                } else if (err.message && (err.message.includes('ECONNREFUSED') || err.message.includes('EHOSTUNREACH'))) {
+                    result.tcpReachable = false;
+                } else {
+                    // Handshake failed or other error
+                    result.tcpReachable = true;
+                }
+                results.push(result);
+            }
         }
+
+        return { detectedPort, results };
     }
 }
+

@@ -5,33 +5,18 @@ export type { CameraProtocol };
 export type DiscoveryStatus = 'pending' | 'discovering' | 'online' | 'offline' | 'authentication_failed' | 'unsupported' | 'error';
 
 /** Unified error categories for all media probes (RTSP, HTTP, HLS, pipe, buffer). */
-export type MediaErrorCategory =
-    | 'dns_error'
-    | 'connection_refused'
-    | 'connection_timeout'
-    | 'authentication_failed'
-    | 'expired_source'
-    | 'rtsp_404'
-    | 'rtsp_454_session_not_found'
-    | 'rtsp_461_transport_unsupported'
-    | 'malformed_uri'
-    | 'malformed_source'
-    | 'invalid_media'
-    | 'no_video_stream'
-    | 'unsupported_codec'
-    | 'unsupported_transport'
-    | 'process_spawn_failed'
-    | 'process_timeout'
-    | 'cancelled'
-    | 'unknown';
+import { MediaErrorCategory } from '../media/media-source';
+export { MediaErrorCategory };
 
 /** @deprecated Use MediaErrorCategory */
 export type RtspErrorCategory = MediaErrorCategory;
 
 /** Status of a single RTSP profile validation attempt. */
 export type ProfileValidationStatus =
+    | 'pending'
     | 'valid'
     | 'invalid'
+    | 'stale'
     | 'authentication_failed'
     | 'timeout'
     | 'unsupported_codec'
@@ -190,15 +175,14 @@ export function cameraStreamUrl(input: { ip?: string; username?: string; passwor
         url.hostname = input.ip;
     }
 
-    // Only inject credentials when the URI carries no auth at all.
-    // ONVIF URIs frequently embed session tokens in the path; do not overwrite.
-    // IMPORTANT: assign directly to url.username / url.password — the URL class
-    // encodes automatically. Using encodeURIComponent first causes double-encoding
-    // which breaks FFmpeg (e.g. '%40' becomes '%2540').
+    // Node's URL class has inconsistent handling of '%' in username/password fields.
+    // It encodes '@' and ':' but leaves '%' alone if it looks like an invalid escape sequence,
+    // which breaks FFmpeg since it expects a properly percent-encoded URI.
+    // We explicitly use encodeURIComponent here.
     const hasAuth = url.username || url.password;
     if (!hasAuth) {
-        if (input.username) url.username = input.username;
-        if (input.password) url.password = input.password;
+        if (input.username) url.username = encodeURIComponent(input.username);
+        if (input.password) url.password = encodeURIComponent(input.password);
     }
 
     return url.toString();

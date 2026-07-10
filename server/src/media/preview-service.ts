@@ -8,6 +8,7 @@ import { IMediaProcessRunner, DefaultMediaProcessRunner } from './media-process-
 import { MediaProbeService } from './media-probe';
 import { ConnectionSecretStore } from './credential-store';
 import { ChildProcess } from 'child_process';
+import { classifyMediaError } from '../cameras/camera-adapter';
 
 export class PreviewService {
     private activeSessions = new Map<string, ChildProcess>();
@@ -95,9 +96,10 @@ export class PreviewService {
                 throw new MediaOperationError('FFmpeg no devolvió un JPEG válido', 'unknown');
             }
 
+            const errorCategory = classifyMediaError(result.stderr, result.exitCode);
             throw new MediaOperationError(
-                `FFmpeg salió con código ${result.exitCode}: ${result.stderr.slice(0, 256)}`,
-                'unknown'
+                `FFmpeg falló (exit ${result.exitCode}): ${result.stderr.slice(0, 256)}`,
+                errorCategory
             );
         }, pluginId, signal);
     }
@@ -137,7 +139,7 @@ export class PreviewService {
                     signal: sig,
                     inputStream: input.inputStream,
                     inputBuffer: input.inputBuffer,
-                    onStdout: (chunk) => res.write(chunk),
+                    outputStream: res, // Delegar a Node para manejar backpressure
                 });
 
                 this.activeSessions.set(correlationId, ff);

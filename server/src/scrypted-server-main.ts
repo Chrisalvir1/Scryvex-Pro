@@ -47,8 +47,9 @@ import { PreviewService } from './media/preview-service';
 import { CameraProviderRegistry } from './cameras/camera-provider-registry';
 import { RtspAdapter } from './cameras/adapters/rtsp-adapter';
 import { OnvifAdapter } from './cameras/adapters/onvif-adapter';
-import { LegacyPluginMediaProviderAdapter } from './cameras/adapters/legacy-plugin-adapter';
+import { LegacyPluginMediaProviderAdapter, PluginMediaObjectResolver } from './cameras/adapters/legacy-plugin-adapter';
 import { MediaProbeService } from './media/media-probe';
+import { MediaOperationError } from './media/media-source';
 
 export type Runtime = ScryptedRuntime;
 
@@ -844,15 +845,33 @@ async function start(mainFilename: string, options?: {
     providerRegistry.register(onvifAdapter);
     // B8: register LegacyPluginMediaProviderAdapter stub (not yet connected to real plugin host)
     // NOTE: Ring, UniFi, Nest are NOT declared as supported until real integration tests pass.
-    // providerRegistry.register(new LegacyPluginMediaProviderAdapter(pluginHost, 'scrypted-plugin'));
+    providerRegistry.register(new LegacyPluginMediaProviderAdapter((scrypted as any).pluginHost, 'scrypted-plugin'));
 
     const resolverRegistry = new MediaInputResolverRegistry();
-    // B7: RtspInputResolver receives onvifAdapter as MediaSourceLocatorStore (Opción B)
-    resolverRegistry.register(new RtspInputResolver(onvifAdapter));
+    const locatorStore: import('./media/media-locator-store').MediaSourceLocatorStore = {
+        async resolveLocatorUri(descriptor, signal) {
+            if (descriptor.sourceType === 'onvif') {
+                return onvifAdapter.resolveLocatorUri(descriptor, signal);
+            }
+            if (descriptor.sourceType === 'rtsp') {
+                const parts = descriptor.sourceLocatorRef?.split(':');
+                const deviceId = String(parts && parts.length > 1 ? parts[1] : descriptor.deviceId);
+                const config = await configRepo.getCameraConfig(deviceId);
+                if (!config?.rtsp_url) throw new MediaOperationError('No RTSP URL configured', 'not_retryable');
+                const url = new URL(config.rtsp_url);
+                url.username = '';
+                url.password = '';
+                return url.toString();
+            }
+            throw new Error(`Unsupported sourceType for locator: ${descriptor.sourceType}`);
+        }
+    };
+    resolverRegistry.register(new RtspInputResolver(locatorStore));
     resolverRegistry.register(new HttpInputResolver());
     resolverRegistry.register(new HlsInputResolver());
     resolverRegistry.register(new PipeInputResolver());
     resolverRegistry.register(new BufferInputResolver());
+    resolverRegistry.register(new PluginMediaObjectResolver((scrypted as any).pluginHost, (scrypted as any).mediaManager));
 
     // B3: sessionManager uses getProviderForCamera — resolved async in MediaSourceSessionManager
     const sessionManager = new MediaSourceSessionManager(
@@ -878,6 +897,11 @@ async function start(mainFilename: string, options?: {
         probeService,
         previewService,
         onvifAdapter,
+        providerRegistry,
+        resolverRegistry,
+        secretStore,
+        mediaProbe,
+        sessionManager,
     }));
     app.use('/api/plugins', createPluginsRouter(pgPool));
 

@@ -35,9 +35,14 @@ export function createCamerasRouter(
         probeService: CameraProbe;
         previewService: PreviewService;
         onvifAdapter: OnvifAdapter;
+        providerRegistry: import('../cameras/camera-provider-registry').CameraProviderRegistry;
+        resolverRegistry: import('../media/media-resolvers').MediaInputResolverRegistry;
+        secretStore: import('../media/credential-store').ConnectionSecretStore;
+        mediaProbe: import('../media/media-probe').MediaProbeService;
+        sessionManager: import('../media/media-session-manager').MediaSourceSessionManager;
     }
 ): Router {
-    const { probeService, previewService, onvifAdapter } = services;
+    const { probeService, previewService, onvifAdapter, providerRegistry, resolverRegistry, secretStore, mediaProbe, sessionManager } = services;
     const router = Router();
     const streamController = new CameraStreamController(cameraService);
 
@@ -117,25 +122,19 @@ export function createCamerasRouter(
 
     router.post('/test-onvif-port', async (req, res) => {
         try {
-            const { host, port, username, password } = req.body as {
-                host: string;
-                port?: number;
-                username?: string;
-                password?: string;
-            };
+            // Frontend might send ip/onvif_port, or backend expects host/port.
+            const { ip, onvif_port, host, port, username, password } = req.body;
 
-            if (!host) {
-                res.status(400).json({ error: 'host is required' });
+            const targetHost = host || ip;
+            const targetPort = port || onvif_port;
+
+            if (!targetHost) {
+                res.status(400).json({ error: 'host or ip is required' });
                 return;
             }
 
-            const portNum = Number(port ?? 80);
-            if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-                res.status(400).json({ error: 'port must be a valid port number (1–65535)' });
-                return;
-            }
-
-            const result = await onvifAdapter.testConnection(host, portNum, username, password);
+            const candidatePorts = targetPort ? [Number(targetPort)] : [80, 8080, 8899, 8000, 8001, 8888, 554];
+            const result = await onvifAdapter.testConnection(targetHost, candidatePorts, username, password);
             res.json(result);
         } catch (err: any) {
             res.status(502).json({ success: false, status: 'error', message: err.message });
@@ -273,7 +272,9 @@ export function createCamerasRouter(
             await previewService.startMjpeg(String(req.params.id), res, probeService);
             void cameraService.recordLog(String(req.params.id), 'camera.preview.terminated');
         } catch (error) {
-            res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+            if (!res.headersSent) {
+                res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+            }
         }
     });
 
@@ -376,28 +377,45 @@ export function createCamerasRouter(
 
     router.post('/:id/diagnostics/rtsp', async (req, res) => {
         try {
-            const camera = await cameraService.findById(req.params.id);
-            const connection = await cameraService.getConnectionInput(req.params.id);
-            if (!camera || !connection) { res.status(404).json({ error: 'Camera not found' }); return; }
+            const deviceId = req.params.id;
+            const camera = await cameraService.findById(deviceId);
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
 
-            const profile = camera.stream_profiles.find(p => p.id === camera.capabilities.video.selectedProfileId)
-                ?? camera.stream_profiles[0];
-            const rawUrl = connection.rtsp_url ?? profile?.streamUri;
-
-            if (!rawUrl) {
-                res.json({ success: false, cameraId: camera.id, profileId: profile?.id, stages: [{ stage: 'url_normalization', success: false, message: 'No hay URL RTSP original' }] });
+            const provider = await providerRegistry.getProviderForCamera(deviceId);
+            const discovery = await provider.getMediaSources(deviceId);
+            if (!discovery.available || discovery.sources.length === 0) {
+                res.status(400).json({ error: 'No media sources available' });
                 return;
             }
 
-            const { MediaProbeService } = await import('../media/media-probe.js');
-            const mediaProbe = new MediaProbeService();
-            const result = await mediaProbe.probeMediaStream({
-                kind: 'rtsp',
-                ffmpegInputArguments: ['-rtsp_transport', 'tcp', '-i', rawUrl.replace(/:\/{2}[^@]+@/, '://***:***@')],
-                probeStrategy: 'ffprobe',
-                redactedDescription: 'RTSP Diagnostics',
-            });
-            res.json({ success: result.success, output: result.stderrSummary, details: result.rawInfo });
+            const profile = camera.stream_profiles?.find(p => p.id === camera.capabilities?.video?.selectedProfileId)
+                ?? camera.stream_profiles?.[0];
+            const descriptorId = profile?.id ?? discovery.sources[0]!.id;
+            
+            const descriptor = discovery.sources.find(s => s.id === descriptorId);
+            if (!descriptor) {
+                res.status(400).json({ error: 'Source descriptor not found' });
+                return;
+            }
+
+            const pluginId = (provider as any).pluginId ?? 'scryvex-core';
+            
+            // AbortController para timeout de seguridad en la respuesta
+            const ac = new AbortController();
+            const timeoutId = setTimeout(() => ac.abort(), 15000);
+
+            try {
+                const result = await sessionManager.executeWithSourceRetry(
+                    deviceId,
+                    descriptorId,
+                    async (input, signal) => mediaProbe.probeMediaStream(input, undefined, signal),
+                    pluginId,
+                    ac.signal
+                );
+                res.json({ success: result.success, output: result.stderrSummary, details: result.rawInfo });
+            } finally {
+                clearTimeout(timeoutId);
+            }
         } catch (err: any) {
             res.status(500).json({ error: err.message });
         }
@@ -406,7 +424,50 @@ export function createCamerasRouter(
     // ── Actions ───────────────────────────────────────────────────────────────
 
     router.post('/:id/actions/:actionType', async (req, res) => {
-        res.status(501).json({ error: 'Actions not implemented in V4' });
+        try {
+            const deviceId = String(req.params.id);
+            const actionType = String(req.params.actionType);
+            const payload: any = req.body;
+
+            const provider = await providerRegistry.getProviderForCamera(deviceId);
+            if (!provider.executeCapability || !provider.listCapabilities) {
+                res.status(400).json({ error: 'Provider does not support capability execution' });
+                return;
+            }
+
+            const capabilities = await provider.listCapabilities(deviceId);
+            const capability = capabilities.find(c => c.operation === actionType);
+            if (!capability || !capability.controllable) {
+                res.status(400).json({ error: 'Capability no existe o no es controlable' });
+                return;
+            }
+
+            // Validar payload
+            if (actionType.startsWith('ptz:')) {
+                if (payload.x !== undefined && (payload.x < -1 || payload.x > 1)) throw new Error('x debe estar entre -1 y 1');
+                if (payload.y !== undefined && (payload.y < -1 || payload.y > 1)) throw new Error('y debe estar entre -1 y 1');
+                if (payload.zoom !== undefined && (payload.zoom < -1 || payload.zoom > 1)) throw new Error('zoom debe estar entre -1 y 1');
+                if (payload.durationSeconds !== undefined && (payload.durationSeconds < 0 || payload.durationSeconds > 60)) throw new Error('durationSeconds fuera de límite seguro');
+            } else if (actionType.startsWith('relay:')) {
+                if (payload.state !== 'active' && payload.state !== 'inactive') throw new Error('state debe ser active o inactive');
+            }
+
+            await provider.executeCapability(deviceId, actionType, payload);
+
+            // Registrar resultado saneado
+            const safePayload = { ...payload };
+            delete safePayload.profileToken; // Por si acaso fue enviado erróneamente
+            delete safePayload.relayToken;
+
+            await cameraService.recordLog(deviceId, 'camera.action.executed', {
+                action: actionType,
+                payload: safePayload
+            });
+
+            res.json({ success: true });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
     });
 
     // ── Matter Devices ────────────────────────────────────────────────────────

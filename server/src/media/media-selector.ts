@@ -22,27 +22,22 @@ export class MediaSourceSelector {
     }
 
     selectForPreview(probedSources: ProbedMediaSource[]): StreamProfile | undefined {
-        let validProfiles = this.getValidProfiles(probedSources);
-        if (validProfiles.length === 0) {
-            // Fallback to any profile if none validated cleanly
-            validProfiles = probedSources.map(p => p.profile);
-        }
+        const validProfiles = this.getValidProfiles(probedSources);
+        if (validProfiles.length === 0) return undefined;
         
         const sortedDesc = this.sortByResolutionAndFps(validProfiles).reverse();
         
         // Find best profile up to 1080p
         const target = sortedDesc.find(p => (p.width || 0) <= 1920 && (p.height || 0) <= 1080);
-        return target || sortedDesc[0]; // If all >1080p, return the smallest of them (last in sortedDesc) or just largest?
-        // Wait, sortedDesc is largest to smallest. If all > 1080p, we want the SMALLEST of them to save bandwidth.
-        // Actually, if we return sortedDesc[0], we return the largest. Let's return the smallest if all >1080p:
-        // sortedDesc[sortedDesc.length - 1]
+        return target || sortedDesc[sortedDesc.length - 1]; // Return smallest if all >1080p
     }
 
     selectForSnapshot(probedSources: ProbedMediaSource[]): StreamProfile | undefined {
         // Usually highest resolution available for snapshots
         const validProfiles = this.getValidProfiles(probedSources);
-        const candidates = validProfiles.length > 0 ? validProfiles : probedSources.map(p => p.profile);
-        return this.sortByResolutionAndFps(candidates).reverse()[0];
+        if (validProfiles.length === 0) return undefined;
+        
+        return this.sortByResolutionAndFps(validProfiles).reverse()[0];
     }
 
     selectForRecording(probedSources: ProbedMediaSource[]): StreamProfile | undefined {
@@ -53,8 +48,10 @@ export class MediaSourceSelector {
     selectForAnalytics(probedSources: ProbedMediaSource[]): StreamProfile | undefined {
         // Usually lower resolution is fine for AI, around 720p-1080p, high frame rate
         const candidates = this.getValidProfiles(probedSources);
+        if (candidates.length === 0) return undefined;
+        
         const sorted = this.sortByResolutionAndFps(candidates);
-        return sorted.find(p => (p.width || 0) <= 1920 && (p.height || 0) <= 1080) || sorted[0];
+        return sorted.find(p => (p.width || 0) <= 1920 && (p.height || 0) <= 1080) || sorted[sorted.length - 1]; // Fallback to smallest if all >1080p
     }
 
     selectForHomeKitH264(probedSources: ProbedMediaSource[]): StreamProfile | undefined {
