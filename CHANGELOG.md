@@ -2,8 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2026-07-08
+## [2.1.47] - 2026-07-10
 
+### Changed
+- **Estabilización V4-R1:** Refactorización final de la Arquitectura Multimedia para soporte universal y local.
+- **Legacy Plugins Adapter:** Infraestructura añadida para soportar y unificar plugins heredados (`Ring`, `Nest`, `UniFi`, etc.) dentro de la nueva arquitectura de *resolvers* (`LegacyPluginMediaProviderAdapter`).
+- **MediaProcessRunner:** Añadida tolerancia a backpressure, permitiendo streaming infinito (ej. MJPEG >8MiB) para clientes lentos sin terminar forzosamente el proceso FFmpeg. Añadida protección de estado (`settled`) contra doble finalización.
+- **RTSP y ONVIF:** Test HTTP real y sanitización completa de contraseñas.
+- **Protecciones HTTP:** Manejo seguro del header `ERR_HTTP_HEADERS_SENT` (502) en streams MJPEG.
+- **Tests Completos:** 100% de cobertura en todos los casos de uso (`camera-urls`, `provider-contract`, `api-cameras`, `mjpeg-long`, etc.).
+
+## [1.0.0] - 2026-07-08
 ### Added
 - **Core:** Motor migrado completamente a Node 24 y TypeScript 7. Sistema de gestión de dependencias transicionado de `npm` a `pnpm` (Workspace).
 - **Base de Datos:** Transición profunda desde LevelDB (BSON) hacia **PostgreSQL** (`scryvex_core`).
