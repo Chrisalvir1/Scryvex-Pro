@@ -35,6 +35,8 @@ export interface CameraCapabilities {
     model?: string;
     firmware?: string;
     serialNumber?: string;
+    /** Entity names explicitly advertised by the camera/integration. */
+    detectedEntities?: string[];
     video: { profiles: StreamProfile[]; selectedProfileId?: string; supportsH264: boolean; supportsH265: boolean; supportsTranscoding: boolean };
     audio: { available: boolean; input: boolean; output: boolean; codecs: string[]; selectedCodec?: string; sampleRates: number[] };
     controls: { ptz: boolean; light: boolean; lightControl: boolean; microphone: boolean; speaker: boolean; twoWayAudio: boolean; siren: boolean; sirenControl: boolean; motionEvents: boolean };

@@ -4,9 +4,9 @@ import { CameraService } from './camera-service';
 export class CameraProbe {
     constructor(private readonly cameraService: CameraService, private readonly registry = new CameraAdapterRegistry()) {}
     async runProbe(cameraId: string) {
-        const camera = await this.cameraService.findById(cameraId); if (!camera) throw new Error('Camera not found');
-        const adapter = this.registry.get(camera.protocol); await this.cameraService.updateDiscovery(cameraId, 'discovering'); await this.cameraService.recordLog(cameraId, 'camera.discovery.started');
-        try { const result = await adapter.discover(camera); await this.cameraService.updateDiscovery(cameraId, result.capabilities.discoveryStatus, result.capabilities, result.streamProfiles); await this.cameraService.recordLog(cameraId, 'camera.discovery.completed', { source: result.capabilities.source }); return result.capabilities; }
+        const camera = await this.cameraService.findById(cameraId); const connection = await this.cameraService.getConnectionInput(cameraId); if (!camera || !connection) throw new Error('Camera not found');
+        const adapter = this.registry.get(camera.protocol); await this.cameraService.updateDiscovery(cameraId, 'discovering'); await this.cameraService.recordLog(cameraId, 'camera.discovery.started', { protocol: camera.protocol, host: camera.ip, port: camera.protocol === 'ONVIF' ? camera.onvif_port : camera.port });
+        try { const result = await adapter.discover(connection); await this.cameraService.updateDiscovery(cameraId, result.capabilities.discoveryStatus, result.capabilities, result.streamProfiles); await this.cameraService.recordLog(cameraId, 'camera.discovery.completed', { source: result.capabilities.source, profiles: result.streamProfiles?.length ?? 0 }); return result.capabilities; }
         catch (error) { const message = error instanceof Error ? error.message : String(error); const capabilities = (error as { capabilities?: any })?.capabilities; await this.cameraService.updateDiscovery(cameraId, capabilities?.discoveryStatus ?? 'error', capabilities, undefined, message); await this.cameraService.recordLog(cameraId, 'camera.discovery.failed', { message }); throw error; }
     }
     async getProbeData(cameraId: string) { return (await this.cameraService.findById(cameraId))?.capabilities ?? null; }

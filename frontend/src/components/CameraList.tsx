@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import type { Camera, CameraEvent } from '../types/camera';
-import { publicAssetUrl } from '../lib/ingress-url';
+import type { Camera } from '../types/camera';
+import { apiUrl, publicAssetUrl } from '../lib/ingress-url';
 
 interface Props {
     cameras: Camera[];
-    events: CameraEvent[];
     onDelete: (id: string) => Promise<void>;
+    onRefresh: () => Promise<void>;
 }
 type ActiveTab = 'preview' | 'logs' | 'info' | 'matter' | 'sensors';
+type PersistentCameraLog = { id: string; event: string; metadata: Record<string, unknown>; created_at: string };
 
 const STATUS_COLORS: Record<Camera['status'], string> = {
     online:  'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
@@ -52,7 +53,7 @@ function getBrandLogo(name: string): string {
     return '';
 }
 
-export function CameraList({ cameras, events, onDelete }: Props) {
+export function CameraList({ cameras, onDelete, onRefresh }: Props) {
     const [selectedId, setSelectedId]     = useState<string | null>(cameras[0]?.id ?? null);
     const [activeTab, setActiveTab]       = useState<ActiveTab>('preview');
     const [deletingId, setDeletingId]     = useState<string | null>(null);
@@ -74,6 +75,9 @@ export function CameraList({ cameras, events, onDelete }: Props) {
     const [matterStatus, setMatterStatus] = useState<any>(null);
     const [matterPairing, setMatterPairing] = useState<any>(null);
     const [matterCountdown, setMatterCountdown] = useState<number>(0);
+    const [persistentLogs, setPersistentLogs] = useState<PersistentCameraLog[]>([]);
+    const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+    const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
 
     // Reset stream state when camera changes
     useEffect(() => {
@@ -86,14 +90,29 @@ export function CameraList({ cameras, events, onDelete }: Props) {
         setMatterStatus(null);
         setMatterPairing(null);
         setMatterCountdown(0);
+        setPersistentLogs([]);
+        setDiscoveryError(null);
+        setSnapshotUrl(null);
+    }, [selectedId]);
+
+    // Existing cameras created before discovery are retried once when selected.
+    useEffect(() => {
+        if (!selectedId) return;
+        fetch(apiUrl(`api/cameras/${selectedId}/capabilities`))
+            .then(response => response.json())
+            .then(data => {
+                if (data.discovery_status === 'pending') return fetch(apiUrl(`api/cameras/${selectedId}/discover`), { method: 'POST' });
+                return undefined;
+            })
+            .catch(() => undefined);
     }, [selectedId]);
 
     // Fetch probe data when entering Info tab
     useEffect(() => {
         if (activeTab === 'info' && selectedId) {
             setProbeLoading(true);
-            fetch(`/api/cameras/${selectedId}/probe`)
-                .then(res => res.json())
+            fetch(apiUrl(`api/cameras/${selectedId}/probe`))
+                .then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error ?? 'No se pudo descubrir la cámara'); return data; })
                 .then(data => setProbeData(data))
                 .catch(err => console.error(err))
                 .finally(() => setProbeLoading(false));
@@ -104,7 +123,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
         if (!selectedId || !probeData) return;
         const newEnabled = !probeData.hevc_enabled;
         setProbeData({ ...probeData, hevc_enabled: newEnabled });
-        await fetch(`/api/cameras/${selectedId}/probe/hevc`, {
+        await fetch(apiUrl(`api/cameras/${selectedId}/probe/hevc`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled: newEnabled })
@@ -114,10 +133,18 @@ export function CameraList({ cameras, events, onDelete }: Props) {
     // Fetch Matter Status and Countdown
     useEffect(() => {
         if (activeTab === 'matter' && selectedId) {
-            fetch(`/api/cameras/${selectedId}/matter/status`)
+            fetch(apiUrl(`api/cameras/${selectedId}/matter/status`))
                 .then(res => res.json())
                 .then(data => setMatterStatus(data));
         }
+    }, [activeTab, selectedId]);
+
+    useEffect(() => {
+        if (activeTab !== 'logs' || !selectedId) return;
+        fetch(apiUrl(`api/cameras/${selectedId}/logs`))
+            .then(res => res.json())
+            .then(data => setPersistentLogs(Array.isArray(data.logs) ? data.logs : []))
+            .catch(err => console.error('Failed to load camera logs', err));
     }, [activeTab, selectedId]);
 
     useEffect(() => {
@@ -133,7 +160,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
 
     const handleGeneratePairing = async () => {
         if (!selectedId) return;
-        const res = await fetch(`/api/cameras/${selectedId}/matter/pairing`);
+        const res = await fetch(apiUrl(`api/cameras/${selectedId}/matter/pairing`));
         const data = await res.json();
         setMatterPairing(data);
         
@@ -145,14 +172,13 @@ export function CameraList({ cameras, events, onDelete }: Props) {
 
     const handleUnpair = async () => {
         if (!selectedId) return;
-        await fetch(`/api/cameras/${selectedId}/matter/unpair`, { method: 'DELETE' });
+        await fetch(apiUrl(`api/cameras/${selectedId}/matter/unpair`), { method: 'DELETE' });
         setMatterStatus({ ...matterStatus, isPaired: false, ecosystems: [] });
     };
 
     const handleCopyLogs = async () => {
-        const selectedEvents = events.filter(e => e.camera_id === selectedId);
-        const logText = selectedEvents.map(ev => 
-            `[${new Date(ev.timestamp).toISOString()}] [${ev.event_type.toUpperCase()}] ${JSON.stringify(ev.metadata)}`
+        const logText = persistentLogs.map(log =>
+            `[${new Date(log.created_at).toISOString()}] [${log.event}] ${JSON.stringify(log.metadata)}`
         ).join('\n');
         
         try {
@@ -164,9 +190,8 @@ export function CameraList({ cameras, events, onDelete }: Props) {
     };
 
     const handleDownloadLogs = () => {
-        const selectedEvents = events.filter(e => e.camera_id === selectedId);
-        const logText = selectedEvents.map(ev => 
-            `[${new Date(ev.timestamp).toISOString()}] [${ev.event_type.toUpperCase()}] ${JSON.stringify(ev.metadata)}`
+        const logText = persistentLogs.map(log =>
+            `[${new Date(log.created_at).toISOString()}] [${log.event}] ${JSON.stringify(log.metadata)}`
         ).join('\n');
         
         const blob = new Blob([logText], { type: 'text/plain' });
@@ -184,7 +209,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
         if (!selectedId) return;
         const currentEnabled = selected?.config?.yolo_enabled === 'true' || selected?.config?.yolo_enabled === true;
         try {
-            await fetch(`/api/cameras/${selectedId}/yolo`, {
+            await fetch(apiUrl(`api/cameras/${selectedId}/yolo`), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled: !currentEnabled })
@@ -197,7 +222,22 @@ export function CameraList({ cameras, events, onDelete }: Props) {
 
     const selected = cameras.find(c => c.id === selectedId) ?? null;
     const capabilities = selected?.capabilities;
-    const cameraEvents = events.filter(e => e.camera_id === selectedId);
+
+    const handleDiscover = async () => {
+        if (!selectedId) return;
+        setStreamLoading(true);
+        setDiscoveryError(null);
+        try {
+            const response = await fetch(apiUrl(`api/cameras/${selectedId}/discover`), { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error ?? 'No se pudo descubrir la cámara');
+            await onRefresh();
+        } catch (error) {
+            setDiscoveryError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setStreamLoading(false);
+        }
+    };
 
     const handleDelete = async (id: string) => {
         if (!confirm('¿Eliminar esta cámara y todo su historial? Esta acción no se puede deshacer.')) return;
@@ -281,13 +321,10 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                 {selected.codec && ` · ${selected.codec}`}
                             </p>
                         </div>
-                        <button
-                            onClick={() => handleDelete(selected.id)}
-                            disabled={deletingId === selected.id}
-                            className="px-3 py-1.5 text-xs font-bold text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                        >
-                            {deletingId === selected.id ? 'Eliminando…' : '🗑 Eliminar'}
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={handleDiscover} disabled={streamLoading} className="px-3 py-1.5 text-xs font-bold text-blue-300 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition-colors disabled:opacity-50">{streamLoading ? 'Detectando…' : '⌕ Detectar'}</button>
+                            <button onClick={() => handleDelete(selected.id)} disabled={deletingId === selected.id} className="px-3 py-1.5 text-xs font-bold text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-colors disabled:opacity-50">{deletingId === selected.id ? 'Eliminando…' : '🗑 Eliminar'}</button>
+                        </div>
                     </div>
 
                     {deleteError && (
@@ -295,6 +332,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                             {deleteError}
                         </p>
                     )}
+                    {discoveryError && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">Descubrimiento fallido: {discoveryError}. Revisa los Logs y confirma el puerto ONVIF/credenciales.</p>}
 
                     {/* Tabs */}
                     <div className="flex gap-1 border-b border-white/10">
@@ -328,7 +366,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                                         </div>
                                                     ) : (
                                                         <div className="relative w-full h-full bg-slate-900 overflow-hidden flex flex-col items-center justify-center">
-                                                            <span className="text-gray-500 font-mono text-sm">Preview de stream no disponible en esta fase</span>
+                                                            {snapshotUrl ? <img src={snapshotUrl} alt={`Snapshot de ${selected.name}`} className="w-full h-full object-contain" onError={() => setDiscoveryError('No se pudo generar un snapshot desde el stream RTSP')} /> : <span className="text-gray-500 font-mono text-sm">Generando snapshot real…</span>}
                                                             {/* HUD only displays values discovered by the adapter. */}
                                                             <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 rounded px-3 py-1.5 flex flex-col items-end gap-1 text-[10px] font-mono text-white/80">
                                                                 <div>CODEC: <span className="text-blue-400 font-bold">{capabilities?.video.profiles[0]?.codec || 'No detectado'}</span></div>
@@ -356,12 +394,19 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                                     onClick={async () => {
                                                         if (isPlaying) {
                                                             setIsPlaying(false);
-                                                            await fetch(`/api/cameras/${selected.id}/stream/stop`, { method: 'POST' });
+                                                            await fetch(apiUrl(`api/cameras/${selected.id}/stream/stop`), { method: 'POST' });
+                                                            setSnapshotUrl(null);
                                                         } else {
-                                                            setIsPlaying(true);
                                                             setStreamLoading(true);
-                                                            await fetch(`/api/cameras/${selected.id}/stream/start`, { method: 'POST' });
-                                                            setStreamLoading(false);
+                                                            setDiscoveryError(null);
+                                                            try {
+                                                                const response = await fetch(apiUrl(`api/cameras/${selected.id}/stream/start`), { method: 'POST' });
+                                                                const data = await response.json();
+                                                                if (!response.ok) throw new Error(data.error ?? 'No se pudo abrir el stream');
+                                                                setIsPlaying(true);
+                                                                setSnapshotUrl(apiUrl(`api/cameras/${selected.id}/snapshot?ts=${Date.now()}`));
+                                                            } catch (error) { setDiscoveryError(error instanceof Error ? error.message : String(error)); }
+                                                            finally { setStreamLoading(false); }
                                                         }
                                                     }}
                                                     className={`px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${isPlaying ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-emerald-500 text-white hover:bg-emerald-400'}`}
@@ -411,14 +456,14 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                 <div className="flex gap-2">
                                     <button 
                                         onClick={handleCopyLogs}
-                                        disabled={cameraEvents.length === 0}
+                                        disabled={persistentLogs.length === 0}
                                         className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-semibold text-white transition-colors disabled:opacity-50"
                                     >
                                         Copiar Logs
                                     </button>
                                     <button 
                                         onClick={handleDownloadLogs}
-                                        disabled={cameraEvents.length === 0}
+                                        disabled={persistentLogs.length === 0}
                                         className="px-3 py-1 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 border border-blue-500/30 rounded text-xs font-semibold transition-colors disabled:opacity-50"
                                     >
                                         Descargar (.txt)
@@ -427,24 +472,19 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                             </div>
                             
                             <div className="bg-black/60 rounded-xl border border-white/5 h-64 p-3 overflow-y-auto font-mono text-xs flex flex-col gap-1">
-                                {cameraEvents.length === 0 ? (
-                                    <p className="text-gray-600 italic">Sin eventos recientes o fallos para esta cámara.</p>
+                                {persistentLogs.length === 0 ? (
+                                    <p className="text-gray-600 italic">Sin logs persistentes para esta cámara.</p>
                                 ) : (
-                                    cameraEvents.map(ev => (
-                                        <div key={ev.id} className="flex gap-2 items-start">
+                                    persistentLogs.map(log => (
+                                        <div key={log.id} className="flex gap-2 items-start">
                                             <span className="text-gray-600 shrink-0">
-                                                {new Date(ev.timestamp).toLocaleTimeString()}
+                                                {new Date(log.created_at).toLocaleTimeString()}
                                             </span>
-                                            <span className={
-                                                ev.event_type === 'error' ? 'text-red-400' :
-                                                ev.event_type === 'offline' ? 'text-yellow-400' :
-                                                ev.event_type === 'person' || ev.event_type === 'motion' ? 'text-emerald-400' :
-                                                'text-blue-300'
-                                            }>
-                                                [{ev.event_type.toUpperCase()}]
+                                            <span className={log.event.includes('failed') ? 'text-red-400' : 'text-blue-300'}>
+                                                [{log.event.toUpperCase()}]
                                             </span>
                                             <span className="text-gray-400 break-all">
-                                                {JSON.stringify(ev.metadata)}
+                                                {JSON.stringify(log.metadata)}
                                             </span>
                                         </div>
                                     ))
@@ -470,6 +510,7 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                             ['Bitrate Video', capabilities?.video.profiles[0]?.bitrate ? `${(capabilities.video.profiles[0].bitrate / 1000000).toFixed(1)} Mbps` : 'No detectado'],
                                             ['Audio Codec', capabilities?.audio.codecs.join(', ') || 'No detectado'],
                                             ['Audio Sample', capabilities?.audio.sampleRates.map(rate => `${rate / 1000} kHz`).join(', ') || 'No detectado'],
+                                            ['Entidades ONVIF', capabilities?.detectedEntities?.join(', ') || 'Ninguna anunciada'],
                                         ].map(([k, v]) => (
                                             <div key={k} className="bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">
                                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">{k}</p>
@@ -562,13 +603,13 @@ export function CameraList({ cameras, events, onDelete }: Props) {
                                             <div className="bg-white/[0.03] border border-white/5 rounded-lg px-4 py-3">
                                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Entidades Expuestas</p>
                                                 <p className="text-xs font-mono text-blue-400 font-bold">
-                                                    {matterStatus?.capabilities?.join(', ') || 'Stream, Mic, Motion'}
+                                                    {matterStatus?.capabilities?.join(', ') || 'No detectadas'}
                                                 </p>
                                             </div>
                                             <div className="bg-white/[0.03] border border-white/5 rounded-lg px-4 py-3">
                                                 <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Codecs</p>
                                                 <p className="text-xs font-mono text-emerald-400 font-bold">
-                                                    {selected.codec || 'H.265 (Crudo)'}
+                                                    {capabilities?.video.profiles.map(profile => profile.codec).filter(Boolean).join(', ') || 'No detectados'}
                                                 </p>
                                             </div>
                                         </div>

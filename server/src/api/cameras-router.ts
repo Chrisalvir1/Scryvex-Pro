@@ -1,9 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { CameraService, CreateCameraInput } from './camera-service';
 import { CameraStreamController } from './camera-stream-controller';
 import { CameraProbe } from './camera-probe';
 import { MatterPairingService } from './matter-pairing';
+
+const execFileAsync = promisify(execFile);
 
 
 /**
@@ -80,7 +84,7 @@ export function createCamerasRouter(
         }
     });
 
-    router.post('/:id/discover', async (req, res) => { try { res.json({ capabilities: await probeService.runProbe(req.params.id) }); } catch (err: any) { res.status(502).json({ error: err.message }); } });
+    router.post('/:id/discover', async (req, res) => { try { const capabilities = await probeService.runProbe(String(req.params.id)); getWsBridge()?.broadcastCamerasUpdated('camera.updated', String(req.params.id)); res.json({ capabilities }); } catch (err: any) { res.status(502).json({ error: err.message }); } });
     router.get('/:id/capabilities', async (req, res) => { const camera = await cameraService.findById(req.params.id); if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; } res.json({ capabilities: camera.capabilities, discovery_status: camera.discovery_status, last_error: camera.last_error }); });
     router.post('/:id/test-connection', async (req, res) => { try { const camera = await cameraService.findById(req.params.id); if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; } const adapter = new CameraProbe(cameraService); const capabilities = await adapter.runProbe(camera.id); res.json({ success: capabilities.discoveryStatus === 'online', status: capabilities.discoveryStatus }); } catch (err: any) { res.status(502).json({ success: false, status: 'error', error: err.message }); } });
     router.get('/:id/logs', async (req, res) => { res.json({ logs: await cameraService.getLogs(req.params.id) }); });
@@ -151,10 +155,18 @@ export function createCamerasRouter(
     });
 
     router.get('/:id/snapshot', async (req, res) => {
-        const camera = await cameraService.findById(req.params.id); if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+        const camera = await cameraService.findById(String(req.params.id)); const connection = await cameraService.getConnectionInput(String(req.params.id)); if (!camera || !connection) { res.status(404).json({ error: 'Camera not found' }); return; }
         const profile = camera.stream_profiles.find(p => p.id === camera.capabilities.video.selectedProfileId) ?? camera.stream_profiles[0];
-        if (profile?.snapshotUri) { try { const response = await fetch(profile.snapshotUri); if (!response.ok) throw new Error(`Snapshot HTTP ${response.status}`); res.type('image/jpeg').send(Buffer.from(await response.arrayBuffer())); return; } catch (error) { await cameraService.recordLog(camera.id, 'camera.snapshot.failed', { error: String(error) }); } }
-        res.status(404).json({ error: 'No hay snapshot disponible para esta cámara' });
+        const rawUrl = connection.rtsp_url ?? profile?.streamUri;
+        if (!rawUrl) { res.status(404).json({ error: 'No hay stream RTSP detectado para generar un snapshot' }); return; }
+        try {
+            const streamUrl = new URL(rawUrl);
+            if (connection.username && !streamUrl.username) streamUrl.username = connection.username;
+            if (connection.password && !streamUrl.password) streamUrl.password = connection.password;
+            const { stdout } = await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', streamUrl.toString(), '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1'], { encoding: 'buffer', maxBuffer: 8 * 1024 * 1024, timeout: 12_000 });
+            await cameraService.recordLog(camera.id, 'camera.snapshot.opened');
+            res.type('image/jpeg').send(stdout);
+        } catch (error) { await cameraService.recordLog(camera.id, 'camera.snapshot.failed', { error: error instanceof Error ? error.message : String(error) }); res.status(502).json({ error: 'No se pudo abrir el stream RTSP para generar el snapshot' }); }
     });
 
     // ── Matter Integration Endpoint ────────────────────────────────────────────

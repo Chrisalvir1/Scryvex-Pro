@@ -19,9 +19,9 @@ export default function App() {
         loading,
         connectionState,
         error,
-        recentEvents,
         addCamera,
         deleteCamera,
+        refetch,
     } = useScryptedCameras();
 
     const [showAddModal, setShowAddModal] = useState(false);
@@ -114,8 +114,8 @@ export default function App() {
                 {!loading && (!error || cameras.length === 0) && currentView === 'cameras' && (
                     <CameraList
                         cameras={cameras}
-                        events={recentEvents}
                         onDelete={deleteCamera}
+                        onRefresh={refetch}
                     />
                 )}
 

@@ -32,7 +32,10 @@ export class CameraStreamController extends EventEmitter {
 
     async startStream(cameraId: string, requestedCodec?: string) {
         const camera = await this.cameraService?.findById(cameraId);
-        if (!camera?.rtsp_url) throw new Error('No existe una URL RTSP válida para esta cámara');
+        const connection = await this.cameraService?.getConnectionInput(cameraId);
+        const profile = camera?.stream_profiles.find(item => item.id === camera.capabilities.video.selectedProfileId) ?? camera?.stream_profiles[0];
+        const rawUrl = connection?.rtsp_url ?? profile?.streamUri;
+        if (!camera || !connection || !rawUrl) throw new Error('No existe una URL RTSP detectada para esta cámara');
         if (requestedCodec && !(await this.validateCodecCapabilities(cameraId, requestedCodec))) throw new Error(`Codec Validation Failed for ${requestedCodec}`);
 
         if (this.streams.has(cameraId)) {
@@ -41,9 +44,14 @@ export class CameraStreamController extends EventEmitter {
         }
 
         this.log(cameraId, 'FFMPEG', `Starting on-demand stream for ${cameraId}`);
-        const process = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'warning', '-rtsp_transport', 'tcp', '-i', camera.rtsp_url, '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
+        const streamUrl = new URL(rawUrl);
+        if (connection.username && !streamUrl.username) streamUrl.username = connection.username;
+        if (connection.password && !streamUrl.password) streamUrl.password = connection.password;
+        const process = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'warning', '-rtsp_transport', 'tcp', '-i', streamUrl.toString(), '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'pipe'] });
         process.stderr?.on('data', data => this.log(cameraId, 'FFMPEG', data.toString().trim()));
-        process.once('exit', () => { this.streams.delete(cameraId); }); this.streams.set(cameraId, process);
+        process.once('error', error => this.log(cameraId, 'camera.stream.failed', error.message));
+        process.once('spawn', () => this.log(cameraId, 'camera.stream.opened', 'ffmpeg abrió el stream'));
+        process.once('exit', code => { this.streams.delete(cameraId); if (code && code !== 0) this.log(cameraId, 'camera.stream.failed', `ffmpeg terminó con código ${code}`); }); this.streams.set(cameraId, process);
     }
 
     stopStream(cameraId: string) {

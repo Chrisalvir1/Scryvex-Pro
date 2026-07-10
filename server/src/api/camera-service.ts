@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { CameraStatus, CameraEvent, CreateCameraInput, CameraProtocol } from '../types/camera';
 import type { CameraCapabilities, DiscoveryStatus, StreamProfile } from '../cameras/camera-adapter';
 import { emptyCapabilities } from '../cameras/camera-adapter';
+import type { CameraConnectionInput } from '../cameras/camera-adapter';
 export { CameraStatus, CameraEvent, CreateCameraInput, CameraProtocol };
 
 export interface Camera {
@@ -28,6 +29,14 @@ export class CameraService {
     private normalize(camera: Camera): Camera { if (!camera.capabilities || Object.keys(camera.capabilities).length === 0) camera.capabilities = emptyCapabilities(camera.protocol === 'ONVIF' ? 'onvif' : camera.protocol === 'RTSP' ? 'rtsp' : 'integration'); if (!camera.stream_profiles) camera.stream_profiles = []; if (!camera.discovery_status) camera.discovery_status = 'pending'; return camera; }
     async findAll(): Promise<Camera[]> { return (await this.pool.query<Camera>(`SELECT ${this.select} FROM scryvex_core.cameras ORDER BY created_at ASC`)).rows.map(camera => this.normalize(camera)); }
     async findById(id: string): Promise<Camera | undefined> { const camera = (await this.pool.query<Camera>(`SELECT ${this.select} FROM scryvex_core.cameras WHERE id = $1`, [id])).rows[0]; return camera ? this.normalize(camera) : undefined; }
+    async getConnectionInput(id: string): Promise<CameraConnectionInput | undefined> {
+        const result = await this.pool.query<Camera & { password_hash?: string }>(`SELECT id, ip, port, onvif_port, rtsp_url, username, password_hash, config FROM scryvex_core.cameras WHERE id = $1`, [id]);
+        const camera = result.rows[0];
+        if (!camera) return undefined;
+        // Existing installations currently store this field as the connection
+        // secret. It is deliberately only selected for server-side adapters.
+        return { id: camera.id, ip: camera.ip, port: camera.port, onvif_port: camera.onvif_port, rtsp_url: camera.rtsp_url, username: camera.username, password: camera.password_hash, config: camera.config };
+    }
 
     async create(input: CreateCameraInput): Promise<Camera> {
         const result = await this.pool.query<Camera>(`INSERT INTO scryvex_core.cameras (name, ip, port, rtsp_url, onvif_port, username, password_hash, protocol, codec, config, hksv_codecs, hksv_video_tiers, hksv_audio_codec, hksv_audio_samplerate, hksv_capabilities, hksv_motion_zones, matter_vendor_id, matter_product_id, matter_device_name, adapter_type, discovery_status, capabilities, stream_profiles) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'pending','{}','[]') RETURNING ${this.select}`, [input.name, input.ip, input.port, input.rtsp_url ?? null, input.onvif_port ?? null, input.username ?? null, input.password ?? null, input.protocol, input.codec ?? null, JSON.stringify(input.config ?? {}), input.hksv_codecs ?? null, input.hksv_video_tiers ? JSON.stringify(input.hksv_video_tiers) : null, input.hksv_audio_codec ?? null, input.hksv_audio_samplerate ?? null, JSON.stringify(input.hksv_capabilities ?? {}), JSON.stringify(input.hksv_motion_zones ?? {}), input.matter_vendor_id ?? null, input.matter_product_id ?? null, input.matter_device_name ?? null, input.protocol]);

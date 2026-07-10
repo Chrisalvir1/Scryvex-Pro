@@ -6,7 +6,7 @@ export type CameraStatus   = 'online' | 'offline' | 'unknown';
 export type DiscoveryStatus = 'pending' | 'discovering' | 'online' | 'offline' | 'authentication_failed' | 'unsupported' | 'error';
 export interface StreamProfile { id: string; name?: string; codec?: string; width?: number; height?: number; fps?: number; bitrate?: number; streamUri?: string; snapshotUri?: string; }
 export interface CameraCapabilities {
-    discoveryStatus: DiscoveryStatus; source: 'onvif' | 'rtsp' | 'integration' | 'manual'; lastCheckedAt?: string; manufacturer?: string; model?: string; firmware?: string; serialNumber?: string;
+    discoveryStatus: DiscoveryStatus; source: 'onvif' | 'rtsp' | 'integration' | 'manual'; lastCheckedAt?: string; manufacturer?: string; model?: string; firmware?: string; serialNumber?: string; detectedEntities?: string[];
     video: { profiles: StreamProfile[]; selectedProfileId?: string; supportsH264: boolean; supportsH265: boolean; supportsTranscoding: boolean };
     audio: { available: boolean; input: boolean; output: boolean; codecs: string[]; selectedCodec?: string; sampleRates: number[] };
     controls: { ptz: boolean; light: boolean; lightControl: boolean; microphone: boolean; speaker: boolean; twoWayAudio: boolean; siren: boolean; sirenControl: boolean; motionEvents: boolean };
