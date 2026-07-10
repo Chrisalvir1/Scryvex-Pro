@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Camera, CameraEvent } from '../types/camera';
+import { publicAssetUrl } from '../lib/ingress-url';
 
 interface Props {
     cameras: Camera[];
@@ -20,27 +21,22 @@ const STATUS_LABELS: Record<string, string> = {
     unknown: 'DESCONOCIDO',
 };
 
-const assetUrl = (path: string) => {
-    const base = import.meta.env.BASE_URL || './';
-    return `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-};
-
 const BRAND_LOGOS: Record<string, string> = {
-    ring: assetUrl('logos/ring.png'),
-    wyze: assetUrl('logos/wyze.png'),
-    tapo: assetUrl('logos/tapo.jpg'),
-    'tp-link': assetUrl('logos/tapo.jpg'),
-    tuya: assetUrl('logos/tuya.png'),
-    ezviz: assetUrl('logos/ezviz.png'),
-    hikvision: assetUrl('logos/hikvision.png'),
-    reolink: assetUrl('logos/reolink.png'),
-    dahua: assetUrl('logos/dahua.png'),
-    google: assetUrl('logos/google-nest.png'),
-    nest: assetUrl('logos/google-nest.png'),
-    arlo: assetUrl('logos/arlo.png'),
-    vimtag: assetUrl('logos/vimtag.png'),
-    rtsp: assetUrl('logos/rtsp.png'),
-    onvif: assetUrl('logos/onvif.png'),
+    ring: publicAssetUrl('logos/ring.png'),
+    wyze: publicAssetUrl('logos/wyze.png'),
+    tapo: publicAssetUrl('logos/tapo.jpg'),
+    'tp-link': publicAssetUrl('logos/tapo.jpg'),
+    tuya: publicAssetUrl('logos/tuya.png'),
+    ezviz: publicAssetUrl('logos/ezviz.png'),
+    hikvision: publicAssetUrl('logos/hikvision.png'),
+    reolink: publicAssetUrl('logos/reolink.png'),
+    dahua: publicAssetUrl('logos/dahua.png'),
+    google: publicAssetUrl('logos/google-nest.png'),
+    nest: publicAssetUrl('logos/google-nest.png'),
+    arlo: publicAssetUrl('logos/arlo.png'),
+    vimtag: publicAssetUrl('logos/vimtag.png'),
+    rtsp: publicAssetUrl('logos/rtsp.png'),
+    onvif: publicAssetUrl('logos/onvif.png'),
 };
 
 // Helper to determine the camera brand logo based on its name

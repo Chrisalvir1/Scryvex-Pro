@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { PluginStatus } from '../types/plugin';
-import { apiUrl } from '../lib/ingress-url';
+import { apiUrl, publicAssetUrl } from '../lib/ingress-url';
 
 type Plugin = {
     id: string;
@@ -10,11 +10,6 @@ type Plugin = {
     version: string;
     icon: string;
     installed: boolean;
-};
-
-const assetUrl = (path: string) => {
-    const base = import.meta.env.BASE_URL || './';
-    return `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
 };
 
 export function PluginStore() {
@@ -167,7 +162,7 @@ export function PluginStore() {
                             {/* Use the icon URL from the API; fall back to a text avatar on 404 */}
                             <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center bg-white/5 border border-white/10">
                                 <img
-                                    src={assetUrl(p.icon)}
+                                    src={publicAssetUrl(p.icon)}
                                     alt={p.name}
                                     className="w-full h-full object-contain p-1"
                                     onError={(e) => {

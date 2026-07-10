@@ -798,7 +798,13 @@ async function start(mainFilename: string, options?: {
         }
     });
 
-    // ── Scryvex Pro V2 Addon Endpoints ────────────────────────
+    // ── Scryvex Pro V2 Addon Endpoints ────────────────────────────────────────
+    // API logging (temporary diagnostic helper)
+    app.use('/api', (req, _res, next) => {
+        console.info(`[API] ${req.method} ${req.originalUrl}`);
+        next();
+    });
+
     let wsBridge: import('./api/cameras-ws').CamerasWebSocketBridge | undefined;
     app.use('/api/cameras', createCamerasRouter(cameraService, pgPool, () => wsBridge));
     app.use('/api/plugins', createPluginsRouter(pgPool));
@@ -815,34 +821,26 @@ async function start(mainFilename: string, options?: {
         res.sendFile(path.join(frontendPath, 'index.html'));
     });
 
-    const hookUpgrade = (server: net.Server | tls.Server) => {
-        server.on('upgrade', (req, socket, upgradeHead) => {
-            (req as any).upgradeHead = upgradeHead;
-            (app as any).handle(req, {
-                socket,
-                upgradeHead
-            })
-        });
-        return server;
-    }
+    // ── HTTP/HTTPS Servers (no hookUpgrade — WebSocket dispatcher handles upgrade events) ──
+    const httpsServer = https.createServer(mergedHttpsServerOptions, app);
+    const httpServer  = http.createServer(app);
 
-    const httpsServer = hookUpgrade(https.createServer(mergedHttpsServerOptions, app));
-    const httpServer  = hookUpgrade(http.createServer(app));
-
-    // ── Scryvex Pro — attach WebSocket bridge for real-time camera events ──
-    // We pass the insecure HTTP server because the Vite dev proxy targets port
-    // 19090 (SCRYPTED_INSECURE_PORT) and cannot easily proxy through the
-    // self-signed TLS cert on 9090. In production the addon reverse-proxies
-    // everything, so both servers receive the upgrade.
+    // ── Scryvex Pro — attach WebSocket bridge AFTER servers are created ──────
+    // attachServer() snapshots existing upgrade listeners before replacing them.
+    // Calling it here ensures we capture all Scrypted listeners registered above.
     wsBridge = new CamerasWebSocketBridge(cameraService);
     wsBridge.attachServer(httpServer as import('./api/cameras-ws').NodeHttpServer);
-    // Also attach to HTTPS so production direct-connect clients work.
-    if (httpsServer) {
-        wsBridge.attachServer(httpsServer as import('./api/cameras-ws').NodeHttpServer);
-    }
-    console.log('[CamerasWS] WebSocket bridge attached to HTTP and HTTPS servers.');
-    // Expose bridge on the runtime so camera/event handlers can call broadcastEvent()
+    wsBridge.attachServer(httpsServer as import('./api/cameras-ws').NodeHttpServer);
+    // Expose bridge for camera/event handlers
     (scrypted as any).wsBridge = wsBridge;
+
+    // ── Global error telemetry (catches crashes without hiding them) ───────────
+    process.on('uncaughtException', (error) => {
+        console.error('[Fatal] Uncaught exception:', error);
+    });
+    process.on('unhandledRejection', (reason) => {
+        console.error('[Fatal] Unhandled rejection:', reason);
+    });
 
     await listenServerPort('SCRYPTED_SECURE_PORT',   SCRYPTED_SECURE_PORT,   httpsServer);
     await listenServerPort('SCRYPTED_INSECURE_PORT', SCRYPTED_INSECURE_PORT, httpServer);

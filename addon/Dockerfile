@@ -50,6 +50,12 @@ RUN pnpm --filter frontend run build
 RUN if [ ! -f "server/dist/scrypted-main.js" ]; then echo "Error: Backend build failed, scrypted-main.js not found!" && exit 1; fi \
     && echo "{\"version\": \"${BUILD_VERSION}\", \"buildTime\": \"$(date -Iseconds)\", \"node\": \"$(node -v)\", \"typescript\": \"7.0.2\"}" > server/dist/build-info.json
 
+# 8.7 Validar que los logos existen en dist (no fatal — marcas opcionales)
+RUN echo "=== Logos in public ===" \
+    && find frontend/public/logos -maxdepth 1 -type f -print 2>/dev/null || echo "[WARN] No logos in frontend/public/logos" \
+    && echo "=== Logos in dist ===" \
+    && find frontend/dist/logos -maxdepth 1 -type f -print 2>/dev/null || echo "[WARN] No logos in frontend/dist/logos"
+
 # 9. Permisos y arranque
 RUN chmod a+x run.sh
 CMD [ "./run.sh" ]

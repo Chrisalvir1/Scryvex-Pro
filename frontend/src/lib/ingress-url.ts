@@ -23,17 +23,20 @@ function getIngressBaseUrl(): URL {
   return current;
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/^\/+/, '');
+}
+
 export function apiUrl(path: string): string {
-  return new URL(path.replace(/^\/+/, ''), getIngressBaseUrl()).toString();
+  return new URL(normalizePath(path), getIngressBaseUrl()).toString();
 }
 
 export function websocketUrl(path: string): string {
-  const url = new URL(
-    path.replace(/^\/+/, ''),
-    getIngressBaseUrl(),
-  );
-
+  const url = new URL(normalizePath(path), getIngressBaseUrl());
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-
   return url.toString();
+}
+
+export function publicAssetUrl(path: string): string {
+  return new URL(normalizePath(path), getIngressBaseUrl()).toString();
 }

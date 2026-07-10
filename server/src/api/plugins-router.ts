@@ -20,10 +20,9 @@ export function createPluginsRouter(pool: Pool): Router {
         { id: 'vimtag',      name: 'Vimtag',             protocol: 'Local',  description: 'Soporte local para cámaras Vimtag.',                                version: '1.0.2', icon: '/logos/vimtag.png',      installed: false },
     ];
 
-    // GET /api/plugins
-    router.get('/', (req, res) => {
-        // In a real scenario, installed status would be read from the DB or filesystem
-        res.json(AVAILABLE_PLUGINS);
+    // GET /api/plugins — always 200, wraps in { plugins: [] } contract
+    router.get('/', (_req, res) => {
+        res.status(200).json({ plugins: AVAILABLE_PLUGINS });
     });
 
     // POST /api/plugins/:id/install

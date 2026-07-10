@@ -1,172 +1,180 @@
-import { IncomingMessage } from 'http';
+import type { IncomingMessage } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
-import { CameraService, CameraEvent } from './camera-service';
+import type { CameraService } from './camera-service';
+
+export const CAMERAS_WS_PATH = '/api/ws/cameras';
 
 export type NodeHttpServer = HttpServer | HttpsServer;
 
-interface WsClient {
-    ws: WebSocket;
-    subscriptions: Set<string>;  // set of camera IDs, or '*' for all
-}
+type UpgradeListener = (
+    request: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+) => void;
 
-interface WsMessage {
-    type: 'subscribe' | 'unsubscribe' | 'ping';
-    camera_id?: string | '*';
-}
-
-interface WsEvent {
-    type: 'camera_event' | 'camera_list_updated' | 'pong' | 'error' | 'cameras.updated';
-    payload: unknown;
+export interface WsEvent {
+    type: string;
+    payload?: unknown;
 }
 
 /**
  * WebSocket bridge for real-time camera events.
  * Clients connect to ws://host/api/ws/cameras
  *
- * Protocol (client → server):
- *   { type: 'subscribe', camera_id: '*' }         → all cameras
- *   { type: 'subscribe', camera_id: '<uuid>' }    → specific camera
- *   { type: 'unsubscribe', camera_id: '<uuid>' }
- *   { type: 'ping' }                              → keepalive
- *
- * Protocol (server → client):
- *   { type: 'camera_event', payload: CameraEvent }
- *   { type: 'camera_list_updated' }              → tells client to re-fetch via REST
- *   { type: 'pong' }
- *   { type: 'error', payload: { message } }
+ * The dispatcher REPLACES the existing upgrade listeners on the HTTP/HTTPS
+ * server and re-dispatches non-Scryvex upgrades to the original Scrypted
+ * listeners.  This prevents Express/finalhandler from receiving a Duplex
+ * socket as if it were a ServerResponse (the crash seen in 2.1.33).
  */
 export class CamerasWebSocketBridge {
-    private wss: WebSocketServer;
-    private clients: Set<WsClient> = new Set();
-    private cameraService: CameraService;
+    private readonly wss: WebSocketServer;
+    private readonly attachedServers = new WeakSet<NodeHttpServer>();
 
-    constructor(cameraService: CameraService) {
-        this.cameraService = cameraService;
+    constructor(
+        private readonly cameraService: CameraService,
+    ) {
         this.wss = new WebSocketServer({ noServer: true });
 
-        this.wss.on('connection', (ws: WebSocket) => {
-            const client: WsClient = { ws, subscriptions: new Set(['*']) };
-            this.clients.add(client);
-            console.log(`[CamerasWS] Client connected (${this.clients.size} total)`);
+        this.wss.on('connection', (socket: WebSocket) => {
+            console.info(
+                `[CamerasWS] Client connected (${this.wss.clients.size} total)`,
+            );
 
-            ws.on('message', (raw) => {
+            socket.send(JSON.stringify({
+                type: 'connection.status',
+                payload: { status: 'connected', transport: 'websocket' },
+            }));
+
+            socket.on('message', (raw) => {
                 try {
-                    const msg = JSON.parse(raw.toString()) as WsMessage;
-                    this.handleClientMessage(client, msg);
+                    const msg = JSON.parse(raw.toString());
+                    if (msg.type === 'ping') {
+                        socket.send(JSON.stringify({ type: 'pong', payload: null }));
+                    }
                 } catch {
-                    this.send(client, { type: 'error', payload: { message: 'Invalid JSON' } });
+                    // ignore parse errors from client
                 }
             });
 
-            ws.on('close', () => {
-                this.clients.delete(client);
-                console.log(`[CamerasWS] Client disconnected (${this.clients.size} remaining)`);
+            socket.on('close', () => {
+                console.info(
+                    `[CamerasWS] Client disconnected (${this.wss.clients.size} remaining)`,
+                );
             });
 
-            ws.on('error', (err) => {
-                console.warn('[CamerasWS] Client error:', err.message);
-                this.clients.delete(client);
+            socket.on('error', (error) => {
+                console.error('[CamerasWS] Client error:', error.message);
             });
+        });
+
+        this.wss.on('error', (error) => {
+            console.error('[CamerasWS] Server error:', error);
         });
     }
 
     /**
-     * Attaches the WebSocket server upgrade handler to an HTTP/HTTPS server.
+     * Attaches the WebSocket dispatcher to an HTTP or HTTPS server.
+     *
+     * Strategy:
+     *   1. Snapshot the upgrade listeners already registered by Scrypted.
+     *   2. Remove them all.
+     *   3. Install a SINGLE new dispatcher that:
+     *        a) Intercepts /api/ws/cameras — handled exclusively by Scryvex.
+     *        b) Delegates everything else to the original Scrypted listeners.
+     *
+     * This guarantees the Duplex socket is NEVER passed to Express/finalhandler.
      */
-    attachServer(server: NodeHttpServer) {
-        const WS_PATH = '/api/ws/cameras';
-        
-        server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-            const url = req.url ?? '';
-            console.info('[CamerasWS] Upgrade request:', url);
-            
-            if (url === WS_PATH || url.startsWith(`${WS_PATH}?`)) {
-                this.wss.handleUpgrade(req, socket, head, (ws) => {
-                    this.wss.emit('connection', ws, req);
+    attachServer(server: NodeHttpServer): void {
+        if (this.attachedServers.has(server)) {
+            console.warn('[CamerasWS] attachServer ignored: server already attached');
+            return;
+        }
+
+        // Snapshot existing listeners BEFORE we remove them
+        const existingListeners = server.listeners('upgrade') as UpgradeListener[];
+        server.removeAllListeners('upgrade');
+
+        const dispatcher: UpgradeListener = (request, socket, head) => {
+            const rawUrl = request.url ?? '/';
+
+            let pathname: string;
+            try {
+                pathname = new URL(rawUrl, 'http://localhost').pathname;
+            } catch {
+                console.warn('[CamerasWS] Invalid upgrade URL:', rawUrl);
+                if (!socket.destroyed) socket.destroy();
+                return;
+            }
+
+            console.info('[CamerasWS] Upgrade request:', rawUrl);
+
+            if (pathname === CAMERAS_WS_PATH) {
+                // Exclusively ours — do NOT call Scrypted listeners after this
+                this.wss.handleUpgrade(request, socket, head, (webSocket) => {
+                    this.wss.emit('connection', webSocket, request);
                 });
+                return;
             }
-        });
-    }
 
-    private handleClientMessage(client: WsClient, msg: WsMessage) {
-        switch (msg.type) {
-            case 'ping':
-                this.send(client, { type: 'pong', payload: null });
-                break;
-            case 'subscribe':
-                if (msg.camera_id) {
-                    client.subscriptions.add(msg.camera_id);
+            // Delegate all other upgrade paths to Scrypted's original listeners
+            if (existingListeners.length > 0) {
+                for (const listener of existingListeners) {
+                    try {
+                        listener.call(server, request, socket, head);
+                    } catch (err) {
+                        console.error('[CamerasWS] Delegated upgrade listener failed:', err);
+                        if (!socket.destroyed) socket.destroy();
+                        return;
+                    }
                 }
-                break;
-            case 'unsubscribe':
-                if (msg.camera_id) {
-                    client.subscriptions.delete(msg.camera_id);
-                }
-                break;
-        }
-    }
-
-    private send(client: WsClient, event: WsEvent) {
-        if (client.ws.readyState === WebSocket.OPEN) {
-            client.ws.send(JSON.stringify(event));
-        }
-    }
-
-    /**
-     * Broadcasts a camera event to all subscribed clients.
-     * Call this from your stream controller / ONVIF event handler.
-     */
-    broadcastEvent(event: CameraEvent) {
-        const payload: WsEvent = { type: 'camera_event', payload: event };
-        const data = JSON.stringify(payload);
-
-        for (const client of this.clients) {
-            if (
-                client.ws.readyState === WebSocket.OPEN &&
-                (client.subscriptions.has('*') || client.subscriptions.has(event.camera_id))
-            ) {
-                client.ws.send(data);
+                return;
             }
-        }
-    }
 
-    /**
-     * Notifies all clients that the camera list changed (camera added or removed).
-     * Clients should re-fetch GET /api/cameras upon receiving this.
-     */
-    broadcastListUpdate() {
-        const payload: WsEvent = { type: 'camera_list_updated', payload: null };
-        const data = JSON.stringify(payload);
-        for (const client of this.clients) {
-            if (client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(data);
-            }
-        }
-    }
-
-    /**
-     * Notifies clients about specific camera updates (created, updated, deleted).
-     */
-    broadcastCamerasUpdated(reason: string, cameraId: string) {
-        const payload: WsEvent = {
-            type: 'cameras.updated',
-            payload: {
-                reason,
-                cameraId
+            // No handler at all — close cleanly with 404
+            console.warn('[CamerasWS] No handler for upgrade path:', pathname);
+            if (!socket.destroyed) {
+                socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+                socket.destroy();
             }
         };
-        const data = JSON.stringify(payload);
-        for (const client of this.clients) {
-            if (client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(data);
+
+        server.on('upgrade', dispatcher);
+        this.attachedServers.add(server);
+
+        console.info(
+            `[CamerasWS] Bridge attached; preserved ${existingListeners.length} previous upgrade listener(s)`,
+        );
+    }
+
+    broadcast(event: WsEvent): void {
+        const serialized = JSON.stringify(event);
+
+        for (const client of this.wss.clients) {
+            if (client.readyState !== WebSocket.OPEN) continue;
+            try {
+                client.send(serialized);
+            } catch (err) {
+                console.error('[CamerasWS] Broadcast failed:', err);
             }
         }
+    }
+
+    broadcastCamerasUpdated(reason: string, cameraId: string): void {
+        this.broadcast({
+            type: 'cameras.updated',
+            payload: { reason, cameraId },
+        });
+    }
+
+    /** Backward-compat alias used by camera-router */
+    broadcastListUpdate(): void {
+        this.broadcast({ type: 'camera_list_updated', payload: null });
     }
 
     get connectedClients(): number {
-        return this.clients.size;
+        return this.wss.clients.size;
     }
 }
