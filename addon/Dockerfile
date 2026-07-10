@@ -25,8 +25,10 @@ RUN npm install -g typescript rimraf
 # 4. Directorio de trabajo
 WORKDIR /usr/src/app
 
-# 5. Copiar el código del Add-on (provisto directamente por HA Supervisor)
-COPY . .
+# 5. Clonar el repositorio base usando BUILD_VERSION como cache-buster y branch target
+ARG BUILD_VERSION
+RUN echo "Fetching Scryvex source tag ${BUILD_VERSION}" \
+    && git clone --depth 1 --branch "${BUILD_VERSION}" https://github.com/Chrisalvir1/Scryvex-Pro-V2.git .
 
 # 6. Descargas manuales de submódulos (probado localmente - NECESARIOS)
 RUN rm -rf external/werift && git clone --depth 1 https://github.com/koush/werift-webrtc.git external/werift
@@ -44,9 +46,9 @@ RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @scryvex/server run build
 RUN pnpm --filter frontend run build
 
-# 8.6 Validar build y generar build-info.json en la imagen
+# 8.6 Validar build y generar build-info.json en la imagen usando BUILD_VERSION
 RUN if [ ! -f "server/dist/scrypted-main.js" ]; then echo "Error: Backend build failed, scrypted-main.js not found!" && exit 1; fi \
-    && echo "{\"version\": \"$(cat addon/config.yaml | grep version | awk -F'\"' '{print $2}')\", \"buildTime\": \"$(date -Iseconds)\", \"node\": \"$(node -v)\", \"typescript\": \"7.0.2\"}" > server/dist/build-info.json
+    && echo "{\"version\": \"${BUILD_VERSION}\", \"buildTime\": \"$(date -Iseconds)\", \"node\": \"$(node -v)\", \"typescript\": \"7.0.2\"}" > server/dist/build-info.json
 
 # 9. Permisos y arranque
 RUN chmod a+x run.sh
