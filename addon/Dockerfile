@@ -16,6 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+RUN command -v ffmpeg \
+    && command -v ffprobe \
+    && ffmpeg -hide_banner -version \
+    && ffprobe -hide_banner -version
+
 # 2. pnpm 11 (Con dangerouslyAllowAllBuilds en pnpm-workspace.yaml)
 RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 

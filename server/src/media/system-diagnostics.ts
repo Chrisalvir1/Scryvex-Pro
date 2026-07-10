@@ -296,6 +296,65 @@ export class SystemDiagnosticsService {
                     newState.errors.push({ test: 'syntheticJpeg', error: this.systemService?.sanitizeMediaDiagnosticMessage(e.message) ?? e.message });
                 }
 
+                // 1.5 mpjpegMuxer
+                if (newState.muxers.mpjpeg) {
+                    try {
+                        newState.functionalTests.mpjpegMuxer = { supported: true, success: false };
+                        
+                        const stdoutBuf = await this.runCommandBuf(newState.ffmpeg.path!, [
+                            '-hide_banner',
+                            '-loglevel', 'error',
+                            '-f', 'lavfi',
+                            '-i', 'testsrc=size=320x240:rate=1',
+                            '-frames:v', '1',
+                            '-f', 'mpjpeg',
+                            '-vcodec', 'mjpeg',
+                            'pipe:1'
+                        ]);
+                        
+                        const header = stdoutBuf.toString('ascii', 0, 100);
+                        if (stdoutBuf.length > 50 && (header.includes('boundary=') || header.includes('--ffmpeg'))) {
+                            newState.functionalTests.mpjpegMuxer.success = true;
+                        } else {
+                            newState.functionalTests.mpjpegMuxer.reason = 'Missing MIME boundary in mpjpeg output';
+                        }
+                    } catch (e: any) {
+                        newState.functionalTests.mpjpegMuxer!.reason = e.message;
+                        newState.errors.push({ test: 'mpjpegMuxer', error: this.systemService?.sanitizeMediaDiagnosticMessage(e.message) ?? e.message });
+                    }
+                }
+
+                // 1.6 opusEncoding
+                if (newState.encoders.opus) {
+                    try {
+                        newState.functionalTests.opusEncoding = { supported: true, success: false };
+                        const testOut = join(tmpdir(), `opus-out-${process.pid}-${randomUUID()}.ogg`);
+                        
+                        try {
+                            await this.runCommandStr(newState.ffmpeg.path!, [
+                                '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', '1', '-c:a', 'libopus', testOut
+                            ]);
+
+                            if (newState.ffprobe.usable && newState.ffprobe.path) {
+                                const probeOut = await this.runCommandStr(newState.ffprobe.path, ['-v', 'error', '-show_streams', '-of', 'json', testOut]);
+                                const probeJson = JSON.parse(probeOut);
+                                if (probeJson.streams && probeJson.streams[0].codec_name === 'opus') {
+                                    newState.functionalTests.opusEncoding.success = true;
+                                } else {
+                                    newState.functionalTests.opusEncoding.reason = 'FFprobe returned not opus';
+                                }
+                            } else {
+                                newState.functionalTests.opusEncoding.success = true; // Assumed success if it didn't throw
+                            }
+                        } finally {
+                            await fs.unlink(testOut).catch(() => undefined);
+                        }
+                    } catch (e: any) {
+                        newState.functionalTests.opusEncoding!.reason = e.message;
+                        newState.errors.push({ test: 'opusEncoding', error: this.systemService?.sanitizeMediaDiagnosticMessage(e.message) ?? e.message });
+                    }
+                }
+
                 // 2. Local Remux Tests (Simulated with synthetic input, copying codec)
                 // H.264
                 if (newState.videoCodecs.h264.encoder && newState.videoCodecs.h264.parser && newState.videoCodecs.h264.bitstreamFilter) {
