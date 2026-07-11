@@ -1,0 +1,43 @@
+#!/command/with-contenv bash
+set -Eeuo pipefail
+
+echo "[postgres-setup] Esperando PostgreSQL..."
+
+for attempt in $(seq 1 60); do
+    if su -s /bin/bash postgres -c "/usr/lib/postgresql/15/bin/pg_isready -q"; then
+        echo "[postgres-setup] PostgreSQL listo."
+        break
+    fi
+
+    if [ "$attempt" -eq 60 ]; then
+        echo "[postgres-setup] ERROR: PostgreSQL no respondió en 60 segundos."
+        exit 1
+    fi
+
+    sleep 1
+done
+
+if ! su -s /bin/bash postgres -c \
+    "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='scryvex_core'\"" \
+    | grep -qx 1; then
+
+    echo "[postgres-setup] Creando base de datos scryvex_core..."
+    su -s /bin/bash postgres -c "createdb scryvex_core"
+fi
+
+if ! su -s /bin/bash postgres -c \
+    "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='scryvex'\"" \
+    | grep -qx 1; then
+
+    echo "[postgres-setup] Creando rol scryvex..."
+    su -s /bin/bash postgres -c \
+        "psql -v ON_ERROR_STOP=1 -c \"CREATE ROLE scryvex LOGIN PASSWORD 'scryvex'\""
+fi
+
+su -s /bin/bash postgres -c \
+    "psql -v ON_ERROR_STOP=1 -c \"GRANT ALL PRIVILEGES ON DATABASE scryvex_core TO scryvex\""
+
+su -s /bin/bash postgres -c \
+    "psql -v ON_ERROR_STOP=1 -d scryvex_core -c \"GRANT ALL ON SCHEMA public TO scryvex\""
+
+echo "[postgres-setup] Configuración completada."

@@ -64,6 +64,13 @@ RUN echo "=== Logos in public ===" \
 # 9. Copiar rootfs (servicios s6-rc)
 COPY rootfs /
 
+RUN set -eux; \
+    test -x /usr/local/bin/scryvex-postgres-setup; \
+    grep -qx '/usr/local/bin/scryvex-postgres-setup' \
+        /etc/s6-overlay/s6-rc.d/postgres-setup/up; \
+    ! grep -q '^until ' \
+        /etc/s6-overlay/s6-rc.d/postgres-setup/up
+
 # 10. Validar versiones requeridas (Fase 0 - Matter Base)
 RUN echo "=== Validating required versions ===" \
     && test -f /usr/src/app/server/node_modules/matterbridge/package.json

@@ -25,12 +25,7 @@ chmod +x addon/rootfs/etc/s6-overlay/s6-rc.d/postgres/run
 # postgres-setup
 echo "oneshot" > addon/rootfs/etc/s6-overlay/s6-rc.d/postgres-setup/type
 cat << 'EOF' > addon/rootfs/etc/s6-overlay/s6-rc.d/postgres-setup/up
-#!/command/with-contenv bash
-until su - postgres -c "pg_isready -q"; do sleep 1; done
-su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname = 'scryvex_core'\" | grep -q 1 || psql -c \"CREATE DATABASE scryvex_core\""
-su - postgres -c "psql -tc \"SELECT 1 FROM pg_roles WHERE rolname = 'scryvex'\" | grep -q 1 || psql -c \"CREATE USER scryvex WITH PASSWORD 'scryvex'\""
-su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE scryvex_core TO scryvex\""
-su - postgres -c "psql -d scryvex_core -c \"GRANT ALL ON SCHEMA public TO scryvex\""
+/usr/local/bin/scryvex-postgres-setup
 EOF
 chmod +x addon/rootfs/etc/s6-overlay/s6-rc.d/postgres-setup/up
 touch addon/rootfs/etc/s6-overlay/s6-rc.d/postgres-setup/dependencies.d/postgres
