@@ -34,6 +34,9 @@ export interface MediaProcessResult {
     durationMs: number;
     timedOut: boolean;
     killedForSize: boolean;
+    stdoutBytes: number;
+    firstOutputAtMs: number | null;
+    aborted: boolean;
 }
 
 export interface IMediaProcessRunner {
@@ -88,13 +91,19 @@ export class DefaultMediaProcessRunner implements IMediaProcessRunner {
         // ── stdout ────────────────────────────────────────────────────────────
         let stdoutBytes = 0;
         let killedForSize = false;
+        let firstOutputAtMs: number | null = null;
         const stdoutChunks: Buffer[] = [];
 
         if (options.outputStream) {
             // Native pipe handles backpressure automatically
+            child.stdout?.on('data', (chunk) => {
+                if (firstOutputAtMs === null) firstOutputAtMs = Date.now() - start;
+                stdoutBytes += chunk.length;
+            });
             child.stdout?.pipe(options.outputStream, { end: false });
         } else if (child.stdout) {
             child.stdout.on('data', (chunk: Buffer) => {
+                if (firstOutputAtMs === null) firstOutputAtMs = Date.now() - start;
                 if (options.onStdout) {
                     const canContinue = options.onStdout(chunk);
                     // Si onStdout devuelve false explícitamente y tenemos acceso al stream subyacente (asumiendo EventEmitter), pausamos
@@ -170,6 +179,9 @@ export class DefaultMediaProcessRunner implements IMediaProcessRunner {
                     durationMs: Date.now() - start,
                     timedOut,
                     killedForSize,
+                    stdoutBytes,
+                    firstOutputAtMs,
+                    aborted: !!options.signal?.aborted,
                 });
             };
 

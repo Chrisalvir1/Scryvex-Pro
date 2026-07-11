@@ -268,13 +268,20 @@ export function createCamerasRouter(
 
     router.get('/:id/preview.mjpeg', async (req, res) => {
         try {
-            await cameraService.recordLog(String(req.params.id), 'camera.preview.requested', { type: 'mjpeg' });
-            await previewService.startMjpeg(String(req.params.id), res, probeService);
-            void cameraService.recordLog(String(req.params.id), 'camera.preview.terminated');
+            await previewService.startMjpeg(String(req.params.id), res, probeService, cameraService);
         } catch (error) {
             if (!res.headersSent) {
                 res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
             }
+        }
+    });
+
+    router.get('/:id/preview/diagnostics', async (req, res) => {
+        try {
+            const diag = await previewService.getDiagnosticsFrame(String(req.params.id), probeService);
+            res.json(diag);
+        } catch (error) {
+            res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
         }
     });
 

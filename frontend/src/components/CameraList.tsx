@@ -79,6 +79,8 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
     const [matterCountdown, setMatterCountdown] = useState<number>(0);
     const [persistentLogs, setPersistentLogs] = useState<PersistentCameraLog[]>([]);
     const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+    const [snapshotError, setSnapshotError] = useState<string | null>(null);
+    const [previewError, setPreviewError] = useState<string | null>(null);
     const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
 
     // Reset stream state when camera changes
@@ -94,6 +96,8 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
         setMatterCountdown(0);
         setPersistentLogs([]);
         setDiscoveryError(null);
+        setSnapshotError(null);
+        setPreviewError(null);
         setSnapshotUrl(null);
     }, [selectedId]);
 
@@ -386,7 +390,36 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                                                         </div>
                                                     ) : (
                                                         <div className="relative w-full h-full bg-slate-900 overflow-hidden flex flex-col items-center justify-center">
-                                                            {snapshotUrl ? <img src={snapshotUrl} alt={`Preview en vivo de ${selected.name}`} className="w-full h-full object-contain" onError={() => setDiscoveryError('No se pudo abrir el preview en vivo desde el stream RTSP')} /> : <span className="text-gray-500 font-mono text-sm">Abriendo preview en vivo…</span>}
+                                                            {previewError ? (
+                                                                <div className="flex flex-col items-center justify-center p-6 bg-red-900/20 border border-red-500/30 rounded-xl max-w-lg text-center">
+                                                                    <div className="text-red-500 text-3xl mb-3">⚠️</div>
+                                                                    <div className="text-sm font-mono text-gray-300 w-full text-left bg-black/50 p-4 rounded mt-2">
+                                                                        <div className="text-emerald-400">Discovery: correcto</div>
+                                                                        <div className="text-emerald-400">Stream detectado: correcto</div>
+                                                                        <div className="text-red-400">Preview: fallido</div>
+                                                                        <div className="mt-2 text-gray-400 text-xs">Error FFmpeg:</div>
+                                                                        <div className="text-red-300 text-xs whitespace-pre-wrap">{previewError}</div>
+                                                                    </div>
+                                                                </div>
+                                                            ) : snapshotUrl ? (
+                                                                <img 
+                                                                    src={snapshotUrl} 
+                                                                    alt={`Preview en vivo de ${selected.name}`} 
+                                                                    className="w-full h-full object-contain" 
+                                                                    onError={async () => {
+                                                                        setSnapshotUrl(null);
+                                                                        setPreviewError('Obteniendo diagnóstico...');
+                                                                        try {
+                                                                            const res = await fetch(apiUrl(`api/cameras/${selected.id}/preview/diagnostics`));
+                                                                            const diag = await res.json();
+                                                                            if (!res.ok) throw new Error(diag.error || 'Error desconocido');
+                                                                            setPreviewError(diag.stderr || `Exit Code: ${diag.exitCode}`);
+                                                                        } catch (e) {
+                                                                            setPreviewError(e instanceof Error ? e.message : String(e));
+                                                                        }
+                                                                    }} 
+                                                                />
+                                                            ) : <span className="text-gray-500 font-mono text-sm">Abriendo preview en vivo…</span>}
                                                             {/* HUD only displays values discovered by the adapter. */}
                                                             <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 rounded px-3 py-1.5 flex flex-col items-end gap-1 text-[10px] font-mono text-white/80">
                                                                 <div>CODEC: <span className="text-blue-400 font-bold">{capabilities?.video.profiles[0]?.codec || 'No detectado'}</span></div>
@@ -417,11 +450,12 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                                                             setSnapshotUrl(null);
                                                         } else {
                                                             setStreamLoading(true);
+                                                            setPreviewError(null);
                                                             setDiscoveryError(null);
                                                             try {
                                                                 setIsPlaying(true);
                                                                 setSnapshotUrl(apiUrl(`api/cameras/${selected.id}/preview.mjpeg?ts=${Date.now()}`));
-                                                            } catch (error) { setDiscoveryError(error instanceof Error ? error.message : String(error)); }
+                                                            } catch (error) { setPreviewError(error instanceof Error ? error.message : String(error)); }
                                                             finally { setStreamLoading(false); }
                                                         }
                                                     }}

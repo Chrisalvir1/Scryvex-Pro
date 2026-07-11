@@ -148,7 +148,13 @@ export default function App() {
 
                 {/* Plugin store view */}
                 {!loading && currentView === 'plugins' && (
-                    <PluginStore />
+                    <div className="flex flex-col items-center justify-center py-24 text-center border border-white/10 rounded-xl bg-white/5 mx-auto max-w-2xl mt-8">
+                        <div className="text-4xl mb-4 opacity-50">🔌</div>
+                        <h2 className="text-xl font-bold text-white mb-2">Integraciones todavía no disponibles</h2>
+                        <p className="text-gray-400 text-sm max-w-md">
+                            La funcionalidad de conectar cuentas cloud de terceros está en desarrollo en el core V4-R1. Pronto podrás añadir plugins.
+                        </p>
+                    </div>
                 )}
             </main>
 
