@@ -61,6 +61,14 @@ RUN echo "=== Logos in public ===" \
     && echo "=== Logos in dist ===" \
     && find frontend/dist/logos -maxdepth 1 -type f -print 2>/dev/null || echo "[WARN] No logos in frontend/dist/logos"
 
-# 9. Permisos y arranque
-RUN chmod a+x run.sh
-CMD [ "./run.sh" ]
+# 9. Copiar rootfs (servicios s6-rc)
+COPY rootfs /
+
+# 10. Validar versiones requeridas (Fase 0 - Matter Base)
+RUN echo "=== Validating required versions ===" \
+    && node --version | grep -q "v24" || { echo "Error: Node.js 24 is required"; exit 1; } \
+    && /usr/src/app/node_modules/.bin/matterbridge --version | grep -q "3.9.4" || { echo "Error: Matterbridge 3.9.4 is required"; exit 1; } \
+    && echo "Node and Matterbridge versions OK"
+
+# 11. Arranque con s6-overlay
+CMD [ "/init" ]

@@ -1,0 +1,9 @@
+#!/command/with-contenv bash
+export MATTERBRIDGE_HOME="/data/scryvex-matter"
+mkdir -p "$MATTERBRIDGE_HOME"
+cd /usr/src/app/server
+if [ ! -f "dist/matter/scryvex-matter.js" ]; then
+    echo "ERROR: dist/matter/scryvex-matter.js not found."
+    exit 1
+fi
+exec node --expose-gc dist/matter/scryvex-matter.js

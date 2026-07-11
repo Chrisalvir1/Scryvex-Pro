@@ -29,3 +29,11 @@ minimumReleaseAgeExclude:
   - '@typescript/typescript-win32-arm64@7.0.2'
   - '@typescript/typescript-win32-x64@7.0.2'
   - typescript@7.0.2
+  - '@matterbridge/core@3.9.4'
+  - '@matterbridge/dgram@3.9.4'
+  - '@matterbridge/jest-utils@3.9.4'
+  - '@matterbridge/thread@3.9.4'
+  - '@matterbridge/types@3.9.4'
+  - '@matterbridge/utils@3.9.4'
+  - '@matterbridge/vitest-utils@3.9.4'
+  - matterbridge@3.9.4

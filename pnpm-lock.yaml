@@ -1004,8 +1004,8 @@ importers:
         specifier: ^4.17.21
         version: 4.18.1
       matterbridge:
-        specifier: ^3.9.3
-        version: 3.9.3
+        specifier: 3.9.4
+        version: 3.9.4
       mime-types:
         specifier: ^3.0.1
         version: 3.0.2
@@ -1637,54 +1637,54 @@ packages:
   '@leichtgewicht/ip-codec@2.0.5':
     resolution: {integrity: sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw==}
 
-  '@matter/general@0.17.4-alpha.0-20260628-67a669f75':
-    resolution: {integrity: sha512-d0R6kpFVsMJz3bSJmpyUCEL7m2ZpRFuftDadBhcgCqW20f1fnteKaRG4eMXte98GQsiGk+AsmTKTUmp9He6cHg==}
+  '@matter/general@0.17.4':
+    resolution: {integrity: sha512-b1Q/Xdf1JHlcUFdaXU8uAaLeMSINMS0kKl/ElaDcE127Ax+3/UbZRtsLDclQopbpXtArXs73XBfdGFCA42gU8Q==}
 
-  '@matter/main@0.17.4-alpha.0-20260628-67a669f75':
-    resolution: {integrity: sha512-mYYIX3UX24WnWEEVKcyTViFu1rYgBb/4eKycnv1auLpI1yAP0HxrcNRnYptCRMux59Urskawv1lWRlt7ilix0A==}
+  '@matter/main@0.17.4':
+    resolution: {integrity: sha512-wQu1CRxtyOaX+dEbCfRgbnNx6RfuPRQOPXKrKpuxebMh/W4xxCGCyUj0Fkb6QkO3wvjgaSnXeKx1PT2/n7wXFA==}
 
-  '@matter/model@0.17.4-alpha.0-20260628-67a669f75':
-    resolution: {integrity: sha512-/nbYjSPMm1clpAdKo+lBQvVrdwK3fqVPPwsSbGDzNviazL4htemtVkiX3dGkA233WzveFU4yOuFUaxjplwHBzA==}
+  '@matter/model@0.17.4':
+    resolution: {integrity: sha512-q5Elw1ad5QykwkIVs9WhUkZQ1yMrHyRjnlKk+g2gO9aAtV9IoS1v+a6JA/dQbsDUiXnbdczU//jhGrOy/vkL6g==}
 
-  '@matter/node@0.17.4-alpha.0-20260628-67a669f75':
-    resolution: {integrity: sha512-gw8WuymbFg8bOfe8E/12UMGHqTAucXOi5uuXPjgEb8GccW4MT/WgcsCLBhvX5RQ8edolJC4IK8V4tdy4eVhdrQ==}
+  '@matter/node@0.17.4':
+    resolution: {integrity: sha512-sQZfPrVC9mxrWHuUjJDhDR2MGMQJFyiRMfZiCZx2kHrbRi404D2Cod5U+ay3hH1zzPxai/PkooA4/wvKR+S4yQ==}
 
-  '@matter/nodejs@0.17.4-alpha.0-20260628-67a669f75':
-    resolution: {integrity: sha512-c9vTt2I+pCC7B4Vr0/wXYojhl4ULwVqM/UWS7NgPZLAtLEkwWxow7MfnzjFbQGXaD78Q3rJFAu5zKabIYJZs7w==}
+  '@matter/nodejs@0.17.4':
+    resolution: {integrity: sha512-c6uiT6yT5qPLhbDpVVo1Z5Q6jZCODB9sUviphwoI+dKcNMIwwjBVA/jRfggnTlR9A0cxiQuhVBQydzlAtCbI7w==}
     engines: {node: '>=20.19.0 <22.0.0 || >=22.13.0'}
 
-  '@matter/protocol@0.17.4-alpha.0-20260628-67a669f75':
-    resolution: {integrity: sha512-UMFMGYOj/gP9RMU/n0JnvvQURuFpBEv/IHr1eQ6ThxE53auHl6uGf7Es5DcQEg/8KPxLPBMtOkSUeKje+sTclw==}
+  '@matter/protocol@0.17.4':
+    resolution: {integrity: sha512-wyju0Km43PVWITr//aHyD4cKDVFVlIrx0x85fRyHn1F8Ab2RY5/IHXIxutcXYl6Jtm22AVeXdeYZUtE6HmWjzQ==}
 
-  '@matter/types@0.17.4-alpha.0-20260628-67a669f75':
-    resolution: {integrity: sha512-YRu/sV5V4z63pFYF/gX8Up1+x1oKL39/neo/M5XBqNTIlwkZbZVvONpiSJItdb8bdjJ7U+yx9i4zSGev7DEFRg==}
+  '@matter/types@0.17.4':
+    resolution: {integrity: sha512-nHiBrV6xoPMDPkuzL3+SQk90/2d4xbBgqwnxYQFqcvVrgITSwpGWzSGRC917BsuZE7koUNyD7T0Wlbt+GAlfkw==}
 
-  '@matterbridge/core@3.9.3':
-    resolution: {integrity: sha512-8Bq3iPNMAKfOYbV1Nom7pNAah3GeAj+fCLHTbzejfqmTiAjOpTm2Yn5SCyAUt5EhUR/MIN3M8qlwCANehZxZxg==}
+  '@matterbridge/core@3.9.4':
+    resolution: {integrity: sha512-dICaymkflSvF/hBJE+/4/r7ubrm6qi1ETqdjCFnf83gRbm6NBJse4DMF0xbg0OUQO5O11bNDPK5/2EYqeQdbuA==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
 
-  '@matterbridge/dgram@3.9.3':
-    resolution: {integrity: sha512-bEm2y+rtDX0fNVzpLfA9agy59ixafkbep/jkyMw9Vq3Bs1AGQY0uE3bC+X1HaPyJ7keJJpMObZ+GSKIHfTjtjg==}
+  '@matterbridge/dgram@3.9.4':
+    resolution: {integrity: sha512-a/apAbxOjlGdwBpCwhLnbNJZciAQMy6elm8AEl/FydPg3B4RdZc5lq5nJGIrECbRIByGUXEBDAmsuwey0Qp49A==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
 
-  '@matterbridge/jest-utils@3.9.3':
-    resolution: {integrity: sha512-K1Sf3jwWGGfkjcdqjq+7Rep++VYsHknPmzgDwzfBo205hwZ2LULwyuI+RmlIcRVravO2uDQnDNy2e87++fxeJg==}
+  '@matterbridge/jest-utils@3.9.4':
+    resolution: {integrity: sha512-W6uEwxl1TbRwf2UR58J05DUgviAsMiBmh1gC6oaKCQmRq6iTDITgSc4JbvhcCxKWicFJdgnnTUEHgU4IyL4rXw==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
 
-  '@matterbridge/thread@3.9.3':
-    resolution: {integrity: sha512-eZTT01Ty1GhGVCZ7jfDv8CTOWx3hHpqqkgFW2cmqPWJ1sYvpR+36F48wtJ4PfApNJRI7PuHwv+mlYwnUByRHGA==}
+  '@matterbridge/thread@3.9.4':
+    resolution: {integrity: sha512-suxj9YS0VjB4WoB8zcEZMeorgJAeU3htPF5ajcUoSx6W/MxfhNk6TyyFSI5fRAmlWQr6MpoDak8qyTbjLnKoFA==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
 
-  '@matterbridge/types@3.9.3':
-    resolution: {integrity: sha512-NxF38M/NtiAuQ/a3X81t2C+SCr9g5MLuSuQtch2m4UYLN13RSlqef/pGipGB8imzWUxZ+BUalhOd/xEnfCXC4A==}
+  '@matterbridge/types@3.9.4':
+    resolution: {integrity: sha512-HEhr63Ls7/xgjMzwSxYt8c4YkcerHwg7YoTdhY6osOWiQxNaBRpmINVqAUMdqzkolhLQxEOan712RaFrFaFqog==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
 
-  '@matterbridge/utils@3.9.3':
-    resolution: {integrity: sha512-qWqUSiqyyBkLC8ePpy1lxu3SHQ8dEVD+dvwn12904pUUlWtrsvDv7zLxiWHI8bcM9aF/c69hMNi5XFe16Iq69g==}
+  '@matterbridge/utils@3.9.4':
+    resolution: {integrity: sha512-NiB8+aZ3BrkOVavhuvOkLqKtfUu3K4nr8ehMNNaddcFWzeA6E2Rsuv2LYDn8LpbD3OY37BIwuBAW/ELbrHUZXQ==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
 
-  '@matterbridge/vitest-utils@3.9.3':
-    resolution: {integrity: sha512-Z1XHZI0aSYo1MTIZ4gLd2TsdYui6qECqNlDBlXJiWKMvFY2os7sr4jmyH+muC8YzGchdt3npO7DqjRgBiYOH1w==}
+  '@matterbridge/vitest-utils@3.9.4':
+    resolution: {integrity: sha512-VklvaIMBsL+Ab7RnQ0XYiSAQvNnbYSDInhjIE5pzzul5TZCcxBLsz944OxJ4nc1rsDArf1iAy3gJ1TpM8vkrew==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
 
   '@napi-rs/wasm-runtime@1.1.6':
@@ -4692,8 +4692,8 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  matterbridge@3.9.3:
-    resolution: {integrity: sha512-nJbqEJYuXgBoN6HW63o4nSljy2GJ7gKpfl/Oh/Vww/KoV2A5Rvw1Og8Xu89mq1ieCcKqNgSLZQyisgyZ6M74Ig==}
+  matterbridge@3.9.4:
+    resolution: {integrity: sha512-7BeA68S34tmvsAc1ma96sMjIuB3GAcVZDFK6CghmiBnif7HkE26a/BxynRcPthJjao1Qj1wsAoAQf3L57zIAIg==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.0.0 <25.0.0 || >=26.0.0 <27.0.0'}
     hasBin: true
 
@@ -7001,57 +7001,57 @@ snapshots:
 
   '@leichtgewicht/ip-codec@2.0.5': {}
 
-  '@matter/general@0.17.4-alpha.0-20260628-67a669f75':
+  '@matter/general@0.17.4':
     dependencies:
       '@noble/curves': 2.2.0
 
-  '@matter/main@0.17.4-alpha.0-20260628-67a669f75':
+  '@matter/main@0.17.4':
     dependencies:
-      '@matter/general': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/model': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/node': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/protocol': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/types': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/general': 0.17.4
+      '@matter/model': 0.17.4
+      '@matter/node': 0.17.4
+      '@matter/protocol': 0.17.4
+      '@matter/types': 0.17.4
     optionalDependencies:
-      '@matter/nodejs': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/nodejs': 0.17.4
 
-  '@matter/model@0.17.4-alpha.0-20260628-67a669f75':
+  '@matter/model@0.17.4':
     dependencies:
-      '@matter/general': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/general': 0.17.4
 
-  '@matter/node@0.17.4-alpha.0-20260628-67a669f75':
+  '@matter/node@0.17.4':
     dependencies:
-      '@matter/general': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/model': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/protocol': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/types': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/general': 0.17.4
+      '@matter/model': 0.17.4
+      '@matter/protocol': 0.17.4
+      '@matter/types': 0.17.4
 
-  '@matter/nodejs@0.17.4-alpha.0-20260628-67a669f75':
+  '@matter/nodejs@0.17.4':
     dependencies:
-      '@matter/general': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/node': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/protocol': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/types': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/general': 0.17.4
+      '@matter/node': 0.17.4
+      '@matter/protocol': 0.17.4
+      '@matter/types': 0.17.4
     optional: true
 
-  '@matter/protocol@0.17.4-alpha.0-20260628-67a669f75':
+  '@matter/protocol@0.17.4':
     dependencies:
-      '@matter/general': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/model': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/types': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/general': 0.17.4
+      '@matter/model': 0.17.4
+      '@matter/types': 0.17.4
 
-  '@matter/types@0.17.4-alpha.0-20260628-67a669f75':
+  '@matter/types@0.17.4':
     dependencies:
-      '@matter/general': 0.17.4-alpha.0-20260628-67a669f75
-      '@matter/model': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/general': 0.17.4
+      '@matter/model': 0.17.4
 
-  '@matterbridge/core@3.9.3':
+  '@matterbridge/core@3.9.4':
     dependencies:
-      '@matter/main': 0.17.4-alpha.0-20260628-67a669f75
-      '@matterbridge/dgram': 3.9.3
-      '@matterbridge/thread': 3.9.3
-      '@matterbridge/types': 3.9.3
-      '@matterbridge/utils': 3.9.3
+      '@matter/main': 0.17.4
+      '@matterbridge/dgram': 3.9.4
+      '@matterbridge/thread': 3.9.4
+      '@matterbridge/types': 3.9.4
+      '@matterbridge/utils': 3.9.4
       escape-html: 1.0.3
       express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
@@ -7064,39 +7064,39 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@matterbridge/dgram@3.9.3':
+  '@matterbridge/dgram@3.9.4':
     dependencies:
-      '@matterbridge/utils': 3.9.3
+      '@matterbridge/utils': 3.9.4
       node-ansi-logger: 3.3.0
 
-  '@matterbridge/jest-utils@3.9.3':
+  '@matterbridge/jest-utils@3.9.4':
     dependencies:
-      '@matter/main': 0.17.4-alpha.0-20260628-67a669f75
-      '@matterbridge/types': 3.9.3
-      '@matterbridge/utils': 3.9.3
+      '@matter/main': 0.17.4
+      '@matterbridge/types': 3.9.4
+      '@matterbridge/utils': 3.9.4
       node-ansi-logger: 3.3.0
 
-  '@matterbridge/thread@3.9.3':
+  '@matterbridge/thread@3.9.4':
     dependencies:
-      '@matterbridge/types': 3.9.3
-      '@matterbridge/utils': 3.9.3
+      '@matterbridge/types': 3.9.4
+      '@matterbridge/utils': 3.9.4
       '@zip.js/zip.js': 2.8.26
       node-ansi-logger: 3.3.0
 
-  '@matterbridge/types@3.9.3':
+  '@matterbridge/types@3.9.4':
     dependencies:
-      '@matter/main': 0.17.4-alpha.0-20260628-67a669f75
+      '@matter/main': 0.17.4
       node-ansi-logger: 3.3.0
 
-  '@matterbridge/utils@3.9.3':
+  '@matterbridge/utils@3.9.4':
     dependencies:
       node-ansi-logger: 3.3.0
 
-  '@matterbridge/vitest-utils@3.9.3':
+  '@matterbridge/vitest-utils@3.9.4':
     dependencies:
-      '@matter/main': 0.17.4-alpha.0-20260628-67a669f75
-      '@matterbridge/types': 3.9.3
-      '@matterbridge/utils': 3.9.3
+      '@matter/main': 0.17.4
+      '@matterbridge/types': 3.9.4
+      '@matterbridge/utils': 3.9.4
       node-ansi-logger: 3.3.0
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
@@ -10237,15 +10237,15 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  matterbridge@3.9.3:
+  matterbridge@3.9.4:
     dependencies:
-      '@matterbridge/core': 3.9.3
-      '@matterbridge/dgram': 3.9.3
-      '@matterbridge/jest-utils': 3.9.3
-      '@matterbridge/thread': 3.9.3
-      '@matterbridge/types': 3.9.3
-      '@matterbridge/utils': 3.9.3
-      '@matterbridge/vitest-utils': 3.9.3
+      '@matterbridge/core': 3.9.4
+      '@matterbridge/dgram': 3.9.4
+      '@matterbridge/jest-utils': 3.9.4
+      '@matterbridge/thread': 3.9.4
+      '@matterbridge/types': 3.9.4
+      '@matterbridge/utils': 3.9.4
+      '@matterbridge/vitest-utils': 3.9.4
       node-ansi-logger: 3.3.0
       node-persist-manager: 2.1.0
     transitivePeerDependencies:

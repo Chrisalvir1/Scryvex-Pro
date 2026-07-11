@@ -1,0 +1,9 @@
+#!/command/with-contenv bash
+PG_DATA_DIR="/data/scryvex_postgres"
+if [ ! -d "$PG_DATA_DIR" ]; then
+    mkdir -p "$PG_DATA_DIR"
+    chown -R postgres:postgres "$PG_DATA_DIR"
+    su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D $PG_DATA_DIR"
+fi
+chown -R postgres:postgres "$PG_DATA_DIR"
+exec su - postgres -c "/usr/lib/postgresql/15/bin/postgres -D $PG_DATA_DIR"

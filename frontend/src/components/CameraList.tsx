@@ -690,14 +690,24 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                                     <h3 className="text-xl font-bold text-white mb-1">Emparejado con Matter</h3>
                                     <p className="text-sm text-gray-400 mb-6">Esta cámara ya está configurada en los siguientes ecosistemas:</p>
                                     
-                                    <div className="flex gap-4 w-full">
+                                    <div className="flex gap-4 w-full flex-wrap justify-center">
                                         {matterStatus.ecosystems.map((eco: any) => (
-                                            <div key={eco.id} className="flex-1 bg-white/[0.03] border border-white/5 rounded-lg p-4 flex flex-col items-center text-center">
+                                            <div key={eco.fabricIndex} className="w-64 bg-white/[0.03] border border-white/5 rounded-lg p-4 flex flex-col items-center text-center">
                                                 <span className="text-2xl mb-2">
-                                                    {eco.id === 'apple' ? '🍎' : eco.id === 'google' ? '🇬' : eco.id === 'alexa' ? '🇦' : '🏠'}
+                                                    {eco.appleFabricPresent || eco.vendorId === 0x1349 ? '🍎' : eco.vendorId === 0x1343 ? '🇬' : eco.vendorId === 0x118D ? '🇦' : '🏠'}
                                                 </span>
-                                                <span className="text-sm font-bold text-white">{eco.name}</span>
-                                                <span className="text-xs text-gray-500">{eco.homeName}</span>
+                                                <span className="text-sm font-bold text-white">
+                                                    {eco.appleFabricPresent || eco.vendorId === 0x1349 ? 'Apple Home' : `Vendor 0x${eco.vendorId.toString(16).toUpperCase()}`}
+                                                </span>
+                                                <span className="text-xs text-gray-400 mt-1">
+                                                    {eco.fabricLabel || 'Nombre no informado por Apple'}
+                                                </span>
+                                                <span className="text-[10px] text-gray-500 font-mono mt-2">
+                                                    Node ID: {eco.nodeId}
+                                                </span>
+                                                <span className="text-[10px] text-gray-500 font-mono">
+                                                    Fabric Index: {eco.fabricIndex}
+                                                </span>
                                             </div>
                                         ))}
                                     </div>

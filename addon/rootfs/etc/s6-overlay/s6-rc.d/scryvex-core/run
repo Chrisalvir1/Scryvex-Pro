@@ -1,0 +1,15 @@
+#!/command/with-contenv bash
+export DATABASE_URL="postgresql://scryvex:scryvex@localhost/scryvex_core"
+export SCRYPTED_VOLUME="/data/.scryvex_pro"
+export SCRYPTED_INSECURE_PORT=19090
+export SCRYPTED_DEBUG_PORT=10082
+
+cd /usr/src/app/server
+if [ "$SCRYVEX_BUILD_ON_START" = "true" ]; then
+    pnpm run build
+fi
+if [ ! -f "dist/scrypted-main.js" ]; then
+    echo "ERROR: dist/scrypted-main.js not found."
+    exit 1
+fi
+exec node --expose-gc dist/scrypted-main.js
