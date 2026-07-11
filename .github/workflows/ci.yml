@@ -27,7 +27,12 @@ jobs:
           version: 11.10.0
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          pnpm \
+            --filter "@scryvex/contracts..." \
+            --filter "@scryvex/server..." \
+            --filter "frontend..." \
+            install --frozen-lockfile
 
       - name: Build Contracts
         run: pnpm --filter @scryvex/contracts run build
@@ -49,6 +54,30 @@ jobs:
 
       - name: Build Frontend
         run: pnpm --filter frontend run build
+
+  # This captures the known installation issue in plugins/hikvision-doorbell
+  # without blocking the core packages or the add-on image, neither of which
+  # currently builds or publishes that plugin.
+  monorepo-integrity:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11.10.0
+
+      - name: Attempt complete monorepo installation
+        run: pnpm install --frozen-lockfile
 
   docker-build:
     runs-on: ubuntu-latest

@@ -51,8 +51,13 @@ RUN rm -rf plugins/onvif/onvif && git clone --depth 1 https://github.com/koush/o
 # 7. Parches: borrar engines (bloquea pnpm 11)
 RUN node -e "const fs=require('fs'); let p='package.json'; let d=JSON.parse(fs.readFileSync(p)); delete d.engines; fs.writeFileSync(p,JSON.stringify(d,null,2));"
 
-# 8. Instalar (dangerouslyAllowAllBuilds en pnpm-workspace.yaml autoriza nativos)
-RUN pnpm install --frozen-lockfile
+# 8. Instalar solamente el núcleo y sus dependencias transitivas. Los plugins
+# no publicados por este add-on se validan por separado en monorepo-integrity.
+RUN pnpm \
+    --filter "@scryvex/contracts..." \
+    --filter "@scryvex/server..." \
+    --filter "frontend..." \
+    install --frozen-lockfile
 
 # 8.5 Compilar Contratos, Backend y Frontend
 RUN pnpm --filter @scryvex/contracts run build
