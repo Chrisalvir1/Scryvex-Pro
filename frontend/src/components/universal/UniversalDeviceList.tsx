@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { DeviceModelView } from '@scryvex/contracts';
 
 export function UniversalDeviceList({ devices, loading, error, onRefresh }: { 
@@ -9,6 +9,17 @@ export function UniversalDeviceList({ devices, loading, error, onRefresh }: {
 }) {
     const [selectedId, setSelectedId] = useState<string | null>(devices[0]?.id ?? null);
     
+    // Auto-selección
+    useEffect(() => {
+        if (!devices.length) {
+            setSelectedId(null);
+            return;
+        }
+        if (!selectedId || !devices.find(d => d.id === selectedId)) {
+            setSelectedId(devices[0].id);
+        }
+    }, [devices, selectedId]);
+
     const selectedDevice = devices.find(d => d.id === selectedId);
 
     if (loading) {
@@ -20,6 +31,16 @@ export function UniversalDeviceList({ devices, loading, error, onRefresh }: {
             <div className="p-8 text-center">
                 <p className="text-red-400 mb-4">{error}</p>
                 <button onClick={onRefresh} className="px-4 py-2 bg-red-500/20 text-red-300 rounded hover:bg-red-500/40">Retry</button>
+            </div>
+        );
+    }
+
+    if (devices.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-24 text-center border border-white/10 rounded-xl bg-white/5 mx-auto max-w-2xl mt-8">
+                <div className="text-4xl mb-4 opacity-50">📷</div>
+                <h2 className="text-xl font-bold text-white mb-2">No hay dispositivos universales</h2>
+                <p className="text-gray-400 text-sm max-w-md">No se detectaron dispositivos proyectados en el modelo universal.</p>
             </div>
         );
     }
@@ -65,6 +86,20 @@ export function UniversalDeviceList({ devices, loading, error, onRefresh }: {
                                 </div>
                             </div>
                         </header>
+
+                        {selectedDevice.diagnostics.partial && selectedDevice.diagnostics.readErrors?.length > 0 && (
+                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex gap-3 text-sm">
+                                <span className="text-xl">⚠️</span>
+                                <div>
+                                    <h3 className="font-bold text-yellow-400 mb-1">Información parcial</h3>
+                                    <ul className="text-yellow-200/80 list-disc list-inside">
+                                        {selectedDevice.diagnostics.readErrors.map((err, idx) => (
+                                            <li key={idx}>No fue posible leer {err.source}: {err.code} - {err.message}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-6">
                             {/* Capabilities */}

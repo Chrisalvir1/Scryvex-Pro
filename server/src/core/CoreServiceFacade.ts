@@ -1,6 +1,6 @@
 import type { DeviceModelView } from '@scryvex/contracts';
 import { PluginRepository } from './PluginRepository';
-import { DeviceRepository } from './DeviceRepository';
+import { DeviceRepository, DeviceListError } from './DeviceRepository';
 
 /**
  * CoreServiceFacade
@@ -17,7 +17,7 @@ export class CoreServiceFacade {
         return this.pluginRepo.getRawPlugins();
     }
 
-    async listDevices(): Promise<{ devices: DeviceModelView[], errors: any[] }> {
+    async listDevices(): Promise<{ devices: DeviceModelView[], errors: DeviceListError[] }> {
         return await this.deviceRepo.listDevices();
     }
 

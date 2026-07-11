@@ -10,8 +10,11 @@ import type {
 
 export class DeviceModelFactory {
     public buildFromSnapshot(snapshot: RawDeviceSnapshot): DeviceModelView {
+        const settings = this.normalizeSettings(snapshot.id, snapshot.pluginId, snapshot.settings);
+        const mediaOptions = this.normalizeMedia(snapshot.id, snapshot.mediaOptions);
+        
         // Calculate stable hash
-        const contentHash = this.calculateHash(snapshot);
+        const contentHash = this.calculateHash(snapshot, settings, mediaOptions);
         
         const interfaces = [...snapshot.interfaces];
         const capabilities = this.normalizeCapabilities(interfaces);
@@ -27,36 +30,54 @@ export class DeviceModelFactory {
             interfaces,
             capabilities,
             media: {
-                options: this.normalizeMedia(snapshot.id, snapshot.mediaOptions)
+                options: mediaOptions
             },
-            settings: this.normalizeSettings(snapshot.id, snapshot.pluginId, snapshot.settings),
-            diagnostics: { status: 'not_evaluated' }
+            settings,
+            diagnostics: { 
+                status: 'not_evaluated',
+                partial: snapshot.readErrors.length > 0,
+                readErrors: snapshot.readErrors.map(error => ({
+                    ...error,
+                    message: this.sanitizeDiagnosticMessage(error.message),
+                }))
+            }
         };
     }
 
-    private calculateHash(snapshot: RawDeviceSnapshot): string {
+    private sanitizeDiagnosticMessage(message: string): string {
+        if (!message) return 'Unknown error';
+        return message.replace(/(https?:\/\/)([^@]+)@/gi, '$1***:***@');
+    }
+
+    private stableStringify(obj: any): string {
+        if (obj === null || obj === undefined) return 'null';
+        if (typeof obj !== 'object') return JSON.stringify(obj);
+        if (Array.isArray(obj)) {
+            return '[' + obj.map(item => this.stableStringify(item)).join(',') + ']';
+        }
+        
+        const keys = Object.keys(obj).sort();
+        const parts = keys.map(key => {
+            return JSON.stringify(key) + ':' + this.stableStringify(obj[key]);
+        });
+        return '{' + parts.join(',') + '}';
+    }
+
+    private calculateHash(snapshot: RawDeviceSnapshot, settings: NormalizedSetting[], mediaOptions: NormalizedMediaOption[]): string {
         const stableContent = {
             id: snapshot.id,
             pluginId: snapshot.pluginId,
+            name: snapshot.name,
+            type: snapshot.type,
+            manufacturer: snapshot.manufacturer,
+            model: snapshot.model,
             interfaces: [...snapshot.interfaces].sort(),
-            settings: snapshot.settings.map((s: RawSettingSnapshot) => ({
-                key: s.key,
-                type: s.type,
-                value: s.value,
-                choices: s.choices
-            })),
-            mediaOptions: snapshot.mediaOptions.map((m: RawMediaOptionSnapshot) => ({
-                id: m.id,
-                name: m.name,
-                source: m.source
-            })),
-            readErrors: snapshot.readErrors.map((e: import('@scryvex/contracts').DeviceReadError) => ({
-                code: e.code,
-                source: e.source
-            }))
+            settings: settings,
+            mediaOptions: mediaOptions,
+            readErrors: snapshot.readErrors
         };
         
-        const json = JSON.stringify(stableContent, Object.keys(stableContent).sort());
+        const json = this.stableStringify(stableContent);
         return crypto.createHash('sha256').update(json).digest('hex').substring(0, 12);
     }
 
@@ -93,7 +114,7 @@ export class DeviceModelFactory {
         if (!rawSettings) return [];
         return rawSettings.map(raw => {
             const mappedType = this.mapType(raw.type);
-            const isSecret = mappedType === 'password'; // El repo ya limpió el value, pero lo re-afirmamos semánticamente.
+            const isSecret = raw.secret ?? (mappedType === 'password');
             
             return {
                 pluginId,
@@ -103,9 +124,9 @@ export class DeviceModelFactory {
                 description: raw.description,
                 type: mappedType,
                 originalType: mappedType === 'unknown' ? raw.type : undefined,
-                value: isSecret ? null : (raw.value as string | number | boolean | null),
+                value: raw.value as string | number | boolean | null,
                 secret: isSecret,
-                configured: isSecret ? (raw.value !== null && raw.value !== undefined && raw.value !== '') : undefined,
+                configured: raw.configured,
                 choices: raw.choices ? [...raw.choices] : undefined,
                 group: raw.group || 'General',
                 subgroup: raw.subgroup,

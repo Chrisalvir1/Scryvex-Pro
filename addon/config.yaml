@@ -1,7 +1,7 @@
-name: "Scryvex Pro V2"
-version: "2.2.3"
+name: "Scryvex Pro"
+version: "3.0.0-alpha.1"
 slug: "scryvex_pro_final"
-description: "Zero-Latency Local-First NVR con YOLOv10 y Matter 1.6"
+description: "Plataforma universal de administración para Scrypted — versión alfa"
 url: "https://github.com/Chrisalvir1/Scryvex-Pro-V2"
 arch:
   - aarch64

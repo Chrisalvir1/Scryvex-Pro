@@ -52,6 +52,8 @@ export interface RawSettingSnapshot {
     description?: string;
     type: string;
     value?: unknown;
+    secret?: boolean;
+    configured?: boolean;
     choices?: string[];
     group?: string;
     subgroup?: string;
@@ -99,6 +101,8 @@ export interface RawDeviceSnapshot {
 
 export interface DeviceDiagnostics {
     status: 'not_evaluated' | 'healthy' | 'warning' | 'critical' | 'offline';
+    partial: boolean;
+    readErrors: DeviceReadError[];
     lastChecked?: string;
 }
 

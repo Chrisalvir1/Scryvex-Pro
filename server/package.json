@@ -1,6 +1,6 @@
 {
   "name": "@scryvex/server",
-  "version": "3.0.0",
+  "version": "3.0.0-alpha.1",
   "description": "Scryvex Pro Core",
   "dependencies": {
     "@scrypted/ffmpeg-static": "^6.1.0-build3",
@@ -74,7 +74,7 @@
     "test": "jest",
     "test:unit": "jest",
     "test:coverage": "jest --coverage",
-    "serve": "node dist/scrypted-server-main.js",
+    "serve": "node --expose-gc dist/scrypted-main.js",
     "serve-no-build": "node --expose-gc dist/scrypted-main.js",
     "prebuild": "rimraf dist",
     "build": "tsc --build tsconfig.json",

@@ -3,6 +3,15 @@ import { CoreServiceFacade } from '../../core/CoreServiceFacade';
 
 export function createScryptedRouter(coreService: CoreServiceFacade): Router {
     const router = Router();
+    
+    // Proteger API universal con autenticación explícita
+    router.use((_req, res, next) => {
+        if (!res.locals.username) {
+            res.status(401).json({ error: 'NOT_AUTHENTICATED' });
+            return;
+        }
+        next();
+    });
 
     // ── Plugins ──────────────────────────────────────────────────────────────
     router.get('/plugins', async (_req: Request, res: Response) => {

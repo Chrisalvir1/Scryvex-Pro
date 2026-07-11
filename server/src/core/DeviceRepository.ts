@@ -7,6 +7,12 @@ interface CacheEntry {
     timestamp: number;
 }
 
+export interface DeviceListError {
+    deviceId: string;
+    code: string;
+    message: string;
+}
+
 export class DeviceRepository {
     private cache = new Map<string, CacheEntry>();
     private pendingFetches = new Map<string, Promise<DeviceModelView | undefined>>();
@@ -17,7 +23,7 @@ export class DeviceRepository {
         private readonly factory: DeviceModelFactory
     ) {}
 
-    async listDevices(): Promise<{ devices: DeviceModelView[], errors: any[] }> {
+    async listDevices(): Promise<{ devices: DeviceModelView[], errors: DeviceListError[] }> {
         const ids = this.pluginRepo.getDeviceIds();
         
         const results = await Promise.allSettled(
@@ -25,16 +31,17 @@ export class DeviceRepository {
         );
 
         const models: DeviceModelView[] = [];
-        const errors: any[] = [];
+        const errors: DeviceListError[] = [];
 
         results.forEach((res, index) => {
             if (res.status === 'fulfilled' && res.value) {
                 models.push(res.value);
             } else if (res.status === 'rejected') {
+                const errReason = res.reason as Error | { message?: string };
                 errors.push({
                     deviceId: ids[index],
                     code: 'DEVICE_SNAPSHOT_FAILED',
-                    message: res.reason?.message || 'Unknown error'
+                    message: errReason?.message || 'Unknown error'
                 });
             }
         });
