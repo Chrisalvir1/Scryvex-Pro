@@ -6,7 +6,7 @@ import { UniversalDeviceList } from './components/universal/UniversalDeviceList'
 import { AddCameraModal } from './components/AddCameraModal';
 import { useMediaCapabilities } from './hooks/useMediaCapabilities';
 import type { CreateCameraInput } from './types/camera';
-import { apiUrl } from './utils/api';
+import { apiUrl } from './lib/ingress-url';
 
 const CONNECTION_BADGE: Record<string, { label: string; className: string }> = {
     connected:    { label: 'En Vivo', className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },

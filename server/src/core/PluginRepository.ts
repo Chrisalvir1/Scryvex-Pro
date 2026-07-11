@@ -102,8 +102,8 @@ export class PluginRepository {
         }
 
         // Sanitización segura y primaria de secretos
-        settings = this.safeSanitize(settings);
-        mediaOptions = this.safeSanitize(mediaOptions);
+        settings = this.safeSanitize(settings) as RawSettingSnapshot[];
+        mediaOptions = this.safeSanitize(mediaOptions) as RawMediaOptionSnapshot[];
         
         const sanitizedSettings = this.redactSecrets(settings);
 
@@ -151,7 +151,7 @@ export class PluginRepository {
     private sanitizeUrlAndStrings(str: string): string {
         if (!str) return str;
         // Strip out user:pass@ in URLs or text
-        return str.replace(/(https?:\/\/)([^@/]+)@/gi, '$1***:***@');
+        return str.replace(/([a-zA-Z0-9]+:\/\/)([^@/]+)@/gi, '$1***:***@');
     }
 
     private safeSanitize(value: unknown, depth: number = 0, seen = new WeakSet()): unknown {
@@ -185,9 +185,9 @@ export class PluginRepository {
                 if (keyCount >= 200) break;
                 const desc = descriptors[key];
                 // Ignore getters to prevent executing side effects
-                if (desc.get) continue;
+                if (desc && desc.get) continue;
                 
-                const sanitizedVal = this.safeSanitize(desc.value, depth + 1, seen);
+                const sanitizedVal = this.safeSanitize(desc ? desc.value : undefined, depth + 1, seen);
                 if (sanitizedVal !== undefined) {
                     sanitizedObj[key] = sanitizedVal;
                     keyCount++;

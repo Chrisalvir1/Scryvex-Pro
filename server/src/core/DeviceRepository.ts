@@ -39,7 +39,7 @@ export class DeviceRepository {
             } else if (res.status === 'rejected') {
                 const errReason = res.reason as Error | { message?: string };
                 errors.push({
-                    deviceId: ids[index],
+                    deviceId: ids[index]!,
                     code: 'DEVICE_SNAPSHOT_FAILED',
                     message: errReason?.message || 'Unknown error'
                 });

@@ -52,7 +52,7 @@ RUN rm -rf plugins/onvif/onvif && git clone --depth 1 https://github.com/koush/o
 RUN node -e "const fs=require('fs'); let p='package.json'; let d=JSON.parse(fs.readFileSync(p)); delete d.engines; fs.writeFileSync(p,JSON.stringify(d,null,2));"
 
 # 8. Instalar (dangerouslyAllowAllBuilds en pnpm-workspace.yaml autoriza nativos)
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # 8.5 Compilar Contratos, Backend y Frontend
 RUN pnpm --filter @scryvex/contracts run build
