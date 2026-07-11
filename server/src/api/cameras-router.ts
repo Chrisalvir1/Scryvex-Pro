@@ -7,6 +7,7 @@ import { CameraProbe } from './camera-probe';
 import { PreviewService } from '../media/preview-service';
 import { MatterPairingService } from './matter-pairing';
 import { OnvifAdapter } from '../cameras/adapters/onvif-adapter';
+import { SnapshotFrameCache } from '../media/snapshot-cache';
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -40,11 +41,20 @@ export function createCamerasRouter(
         secretStore: import('../media/credential-store').ConnectionSecretStore;
         mediaProbe: import('../media/media-probe').MediaProbeService;
         sessionManager: import('../media/media-session-manager').MediaSourceSessionManager;
+        selector: import('../media/media-selector').MediaSourceSelector;
+        ffmpegRunner: import('../media/media-process-runner').IMediaProcessRunner;
     }
 ): Router {
     const { probeService, previewService, onvifAdapter, providerRegistry, resolverRegistry, secretStore, mediaProbe, sessionManager } = services;
     const router = Router();
     const streamController = new CameraStreamController(cameraService);
+
+    // ── Snapshot frame cache (single-flight per camera) ───────────────────────
+    const snapshotCache = new SnapshotFrameCache(
+        services.selector,
+        services.ffmpegRunner,
+        services.sessionManager,
+    );
 
     // ── Cameras CRUD ──────────────────────────────────────────────────────────
 
@@ -248,7 +258,53 @@ export function createCamerasRouter(
         }
     });
 
-    // B9: /snapshot also uses PreviewService.getFrame — no direct execFile/spawn
+    // ── /preview/frame.jpg — finite JPEG, Content-Length, abort-aware ─────────
+    router.get('/:id/preview/frame.jpg', async (req, res) => {
+        const ac = new AbortController();
+        req.on('close', () => ac.abort());
+
+        try {
+            const camera = await cameraService.findById(String(req.params.id));
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+
+            let probedSources = await probeService.getProbedSources(String(req.params.id));
+            if (!probedSources || probedSources.length === 0) {
+                await probeService.runProbe(String(req.params.id));
+                probedSources = await probeService.getProbedSources(String(req.params.id));
+            }
+
+            if (!probedSources || probedSources.length === 0) {
+                res.status(503).json({ error: 'No hay perfiles validados. Ejecute Detectar primero.' });
+                return;
+            }
+
+            const { jpeg, profileId, codec, ttlMs, source } = await snapshotCache.getFrame(
+                String(req.params.id),
+                probedSources,
+                ac.signal,
+            );
+
+            if (res.headersSent) return;
+
+            res
+                .status(200)
+                .set('Content-Type', 'image/jpeg')
+                .set('Content-Length', String(jpeg.length))
+                .set('Cache-Control', 'no-store')
+                .set('X-Content-Type-Options', 'nosniff')
+                .set('X-Frame-Profile', profileId)
+                .set('X-Frame-Codec', codec)
+                .set('X-Frame-Source', source)
+                .set('X-Frame-TTL', String(ttlMs))
+                .end(jpeg);
+        } catch (err) {
+            if (res.headersSent) return;
+            if ((err as any)?.name === 'AbortError' || ac.signal.aborted) return;
+            res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+        }
+    });
+
+    // B9: /snapshot — kept for backward compat
     router.get('/:id/snapshot', async (req, res) => {
         try {
             const camera = await cameraService.findById(String(req.params.id));

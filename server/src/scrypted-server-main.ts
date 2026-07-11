@@ -902,6 +902,8 @@ async function start(mainFilename: string, options?: {
         secretStore,
         mediaProbe,
         sessionManager,
+        selector,
+        ffmpegRunner: (previewService as any).runner,
     }));
     app.use('/api/plugins', createPluginsRouter(pgPool));
 

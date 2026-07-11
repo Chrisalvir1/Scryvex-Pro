@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Camera, CameraLog } from '../types/camera';
 import type { MediaCapabilities } from '../hooks/useMediaCapabilities';
@@ -61,17 +61,22 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
     const [deletingId, setDeletingId]     = useState<string | null>(null);
     const [deleteError, setDeleteError]   = useState<string | null>(null);
 
-    // Stream Controls State
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [isMuted, setIsMuted] = useState(true);
-    const [micActive, setMicActive] = useState(false);
-    const [lightActive, setLightActive] = useState(false);
-    const [sirenActive, setSirenActive] = useState(false);
-    const [streamLoading, setStreamLoading] = useState(false);
+    // Snapshot polling state
+    const [isPlaying, setIsPlaying]           = useState(false);
+    const [streamLoading, setStreamLoading]   = useState(false);
+    const [snapshotObjectUrl, setSnapshotObjectUrl] = useState<string | null>(null);
+    const [previewError, setPreviewError]     = useState<string | null>(null);
+    const [previewCodec, setPreviewCodec]     = useState<string>('');
+    const [previewProfile, setPreviewProfile] = useState<string>('');
+    const [frameCount, setFrameCount]         = useState(0);
 
-    // Codec Probe State
-    const [probeData, setProbeData] = useState<any>(null);
-    const [probeLoading, setProbeLoading] = useState(false);
+    // Refs — not state, so they don't trigger re-renders
+    const pollingActive   = useRef(false);
+    const currentAC       = useRef<AbortController | null>(null);
+    const pollTimeoutRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const prevObjectUrl   = useRef<string | null>(null);
+    const firstFrameLogged = useRef(false);
+    const selectedIdRef   = useRef<string | null>(null);
 
     // Matter Pairing State
     const [matterStatus, setMatterStatus] = useState<any>(null);
@@ -80,16 +85,34 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
     const [persistentLogs, setPersistentLogs] = useState<PersistentCameraLog[]>([]);
     const [discoveryError, setDiscoveryError] = useState<string | null>(null);
     const [snapshotError, setSnapshotError] = useState<string | null>(null);
-    const [previewError, setPreviewError] = useState<string | null>(null);
     const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
+
+    // Controls (light/siren still functional; audio removed)
+    const [lightActive, setLightActive] = useState(false);
+    const [sirenActive, setSirenActive] = useState(false);
+
+    // Probe data (info tab)
+    const [probeData, setProbeData] = useState<any>(null);
+    const [probeLoading, setProbeLoading] = useState(false);
 
     // Reset stream state when camera changes
     useEffect(() => {
         setIsPlaying(false);
-        setMicActive(false);
-        setLightActive(false);
-        setSirenActive(false);
         setStreamLoading(false);
+        setSnapshotObjectUrl(null);
+        setPreviewError(null);
+        setPreviewCodec('');
+        setPreviewProfile('');
+        setFrameCount(0);
+        pollingActive.current = false;
+        currentAC.current?.abort();
+        currentAC.current = null;
+        if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+        firstFrameLogged.current = false;
+        selectedIdRef.current = selectedId;
+        if (prevObjectUrl.current) { URL.revokeObjectURL(prevObjectUrl.current); prevObjectUrl.current = null; }
+
         setProbeData(null);
         setMatterStatus(null);
         setMatterPairing(null);
@@ -97,9 +120,66 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
         setPersistentLogs([]);
         setDiscoveryError(null);
         setSnapshotError(null);
-        setPreviewError(null);
         setSnapshotUrl(null);
+        setLightActive(false);
+        setSirenActive(false);
     }, [selectedId]);
+
+    // ── Recursive snapshot polling ──────────────────────────────────────────────
+    const schedulePoll = useCallback((camId: string, delayMs: number) => {
+        if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = setTimeout(async () => {
+            if (!pollingActive.current || selectedIdRef.current !== camId) return;
+
+            const ac = new AbortController();
+            currentAC.current = ac;
+
+            try {
+                const res = await fetch(apiUrl(`api/cameras/${camId}/preview/frame.jpg`), {
+                    signal: ac.signal,
+                    cache: 'no-store',
+                });
+
+                if (!pollingActive.current || selectedIdRef.current !== camId) return;
+
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.error || `HTTP ${res.status}`);
+                }
+
+                const blob = await res.blob();
+                const newUrl = URL.createObjectURL(blob);
+
+                // Read adaptive TTL from server header
+                const ttlMs = parseInt(res.headers.get('X-Frame-TTL') || '1000', 10) || 1000;
+                const codec = res.headers.get('X-Frame-Codec') || '';
+                const profileId = res.headers.get('X-Frame-Profile') || '';
+
+                // Revoke previous blob URL
+                if (prevObjectUrl.current) URL.revokeObjectURL(prevObjectUrl.current);
+                prevObjectUrl.current = newUrl;
+
+                setSnapshotObjectUrl(newUrl);
+                setStreamLoading(false);
+                setPreviewError(null);
+                setPreviewCodec(codec);
+                setPreviewProfile(profileId);
+                setFrameCount(c => c + 1);
+
+                // Schedule next poll only after this one completes
+                if (pollingActive.current && selectedIdRef.current === camId) {
+                    schedulePoll(camId, ttlMs);
+                }
+            } catch (err: any) {
+                if (err?.name === 'AbortError') return;
+                if (!pollingActive.current || selectedIdRef.current !== camId) return;
+                setStreamLoading(false);
+                setPreviewError(err instanceof Error ? err.message : String(err));
+                pollingActive.current = false;
+                setIsPlaying(false);
+            }
+        }, delayMs);
+    }, []);
 
     // Existing cameras created before discovery are retried once when selected.
     useEffect(() => {
@@ -372,10 +452,9 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                             <div className="flex-1 bg-black/20 rounded-b-xl border border-t-0 border-white/10 overflow-hidden relative min-h-[400px]">
                                 {activeTab === 'preview' && (
                                     <div className="absolute inset-0 flex flex-col">
-                                        
                                         {sysCaps && (!sysCaps.ffmpeg?.usable) && (
                                             <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 text-center text-xs text-red-400 font-bold z-10">
-                                                FFmpeg no está disponible. El servidor no puede procesar video en vivo para WebRTC ni HKSV Remux.
+                                                FFmpeg no está disponible. El servidor no puede generar snapshots.
                                             </div>
                                         )}
 
@@ -386,56 +465,55 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                                                     {streamLoading ? (
                                                         <div className="flex flex-col items-center gap-3">
                                                             <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-                                                            <span className="text-sm text-gray-400 font-mono">Iniciando Stream HLS/MPEG-TS...</span>
+                                                            <span className="text-sm text-gray-400 font-mono">Obteniendo primer frame…</span>
                                                         </div>
                                                     ) : (
                                                         <div className="relative w-full h-full bg-slate-900 overflow-hidden flex flex-col items-center justify-center">
                                                             {previewError ? (
                                                                 <div className="flex flex-col items-center justify-center p-6 bg-red-900/20 border border-red-500/30 rounded-xl max-w-lg text-center">
                                                                     <div className="text-red-500 text-3xl mb-3">⚠️</div>
+                                                                    <div className="text-sm font-bold text-white mb-2">Error de Preview</div>
                                                                     <div className="text-sm font-mono text-gray-300 w-full text-left bg-black/50 p-4 rounded mt-2">
                                                                         <div className="text-emerald-400">Discovery: correcto</div>
-                                                                        <div className="text-emerald-400">Stream detectado: correcto</div>
-                                                                        <div className="text-red-400">Preview: fallido</div>
-                                                                        <div className="mt-2 text-gray-400 text-xs">Error FFmpeg:</div>
+                                                                        <div className="text-emerald-400">RTSP detectado: correcto</div>
+                                                                        <div className="text-red-400">Snapshot: fallido</div>
+                                                                        <div className="mt-2 text-gray-400 text-xs">Error:</div>
                                                                         <div className="text-red-300 text-xs whitespace-pre-wrap">{previewError}</div>
                                                                     </div>
+                                                                    <button
+                                                                        onClick={() => { setPreviewError(null); pollingActive.current = true; schedulePoll(selected.id, 0); }}
+                                                                        className="mt-4 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg"
+                                                                    >Reintentar</button>
                                                                 </div>
-                                                            ) : snapshotUrl ? (
-                                                                <img 
-                                                                    src={snapshotUrl} 
-                                                                    alt={`Preview en vivo de ${selected.name}`} 
-                                                                    className="w-full h-full object-contain" 
-                                                                    onError={async () => {
-                                                                        setSnapshotUrl(null);
-                                                                        setPreviewError('Obteniendo diagnóstico...');
-                                                                        try {
-                                                                            const res = await fetch(apiUrl(`api/cameras/${selected.id}/preview/diagnostics`));
-                                                                            const diag = await res.json();
-                                                                            if (!res.ok) throw new Error(diag.error || 'Error desconocido');
-                                                                            setPreviewError(diag.stderr || `Exit Code: ${diag.exitCode}`);
-                                                                        } catch (e) {
-                                                                            setPreviewError(e instanceof Error ? e.message : String(e));
-                                                                        }
-                                                                    }} 
+                                                            ) : snapshotObjectUrl ? (
+                                                                <img
+                                                                    key={snapshotObjectUrl}
+                                                                    src={snapshotObjectUrl}
+                                                                    alt={`Preview de ${selected.name}`}
+                                                                    className="w-full h-full object-contain"
                                                                 />
-                                                            ) : <span className="text-gray-500 font-mono text-sm">Abriendo preview en vivo…</span>}
-                                                            {/* HUD only displays values discovered by the adapter. */}
-                                                            <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 rounded px-3 py-1.5 flex flex-col items-end gap-1 text-[10px] font-mono text-white/80">
-                                                                <div>CODEC: <span className="text-blue-400 font-bold">{capabilities?.video.profiles[0]?.codec || 'No detectado'}</span></div>
-                                                                <div>RES: <span className="text-emerald-400">{capabilities?.video.profiles[0]?.width && capabilities.video.profiles[0]?.height ? `${capabilities.video.profiles[0].width}x${capabilities.video.profiles[0].height}` : 'No detectada'}</span></div>
-                                                                <div>FPS: <span className="text-yellow-400">{capabilities?.video.profiles[0]?.fps ?? 'No detectados'}</span></div>
-                                                            </div>
+                                                            ) : (
+                                                                <span className="text-gray-500 font-mono text-sm">Conectando…</span>
+                                                            )}
+                                                            {/* HUD */}
+                                                            {snapshotObjectUrl && !previewError && (
+                                                                <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 rounded px-3 py-1.5 flex flex-col items-end gap-1 text-[10px] font-mono text-white/80">
+                                                                    <div>CODEC: <span className="text-blue-400 font-bold">{previewCodec || 'Detectando…'}</span></div>
+                                                                    <div>RES: <span className="text-emerald-400">{capabilities?.video.profiles[0]?.width && capabilities.video.profiles[0]?.height ? `${capabilities.video.profiles[0].width}x${capabilities.video.profiles[0].height}` : '—'}</span></div>
+                                                                    <div>FRAMES: <span className="text-yellow-400">{frameCount}</span></div>
+                                                                    <div className="text-gray-500 text-[9px]">{previewProfile ? `Perfil: ${previewProfile.slice(0, 16)}` : ''}</div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
                                             ) : (
                                                 <div className="text-center">
                                                     <div className="w-16 h-16 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-4">
-                                                        <span className="text-2xl opacity-50">⏸️</span>
+                                                        <span className="text-2xl opacity-50">📷</span>
                                                     </div>
-                                                    <p className="text-sm text-gray-500">Stream pausado.</p>
-                                                    <p className="text-xs text-gray-600 mt-1">Haz clic en Play para iniciar la transmisión.</p>
+                                                    <p className="text-sm text-gray-500">Preview pausado.</p>
+                                                    <p className="text-xs text-gray-600 mt-1">Haz clic en Play para iniciar el snapshot polling.</p>
                                                 </div>
                                             )}
                                         </div>
@@ -443,20 +521,29 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                                         {/* Control Bar */}
                                         <div className="h-14 bg-[#0c1015] border-t border-white/10 flex items-center justify-between px-4">
                                             <div className="flex gap-2">
-                                                <button 
-                                                    onClick={async () => {
+                                                <button
+                                                    onClick={() => {
                                                         if (isPlaying) {
+                                                            // Stop
+                                                            pollingActive.current = false;
+                                                            currentAC.current?.abort();
+                                                            currentAC.current = null;
+                                                            if (pollTimeoutRef.current) { clearTimeout(pollTimeoutRef.current); pollTimeoutRef.current = null; }
+                                                            if (prevObjectUrl.current) { URL.revokeObjectURL(prevObjectUrl.current); prevObjectUrl.current = null; }
+                                                            setSnapshotObjectUrl(null);
                                                             setIsPlaying(false);
-                                                            setSnapshotUrl(null);
+                                                            setPreviewError(null);
+                                                            setFrameCount(0);
+                                                            firstFrameLogged.current = false;
                                                         } else {
+                                                            // Start
+                                                            setIsPlaying(true);
                                                             setStreamLoading(true);
                                                             setPreviewError(null);
-                                                            setDiscoveryError(null);
-                                                            try {
-                                                                setIsPlaying(true);
-                                                                setSnapshotUrl(apiUrl(`api/cameras/${selected.id}/preview.mjpeg?ts=${Date.now()}`));
-                                                            } catch (error) { setPreviewError(error instanceof Error ? error.message : String(error)); }
-                                                            finally { setStreamLoading(false); }
+                                                            setFrameCount(0);
+                                                            firstFrameLogged.current = false;
+                                                            pollingActive.current = true;
+                                                            schedulePoll(selected.id, 0);
                                                         }
                                                     }}
                                                     className={`px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${!sysCaps || sysCaps.ffmpeg?.usable ? (isPlaying ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-emerald-500 text-white hover:bg-emerald-400') : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
@@ -464,24 +551,9 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                                                 >
                                                     {isPlaying ? '⏹ Detener' : '▶ Reproducir'}
                                                 </button>
-
-                                                <button 
-                                                    disabled={!isPlaying}
-                                                    onClick={() => setIsMuted(!isMuted)}
-                                                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${isMuted ? 'bg-white/5 text-gray-400' : 'bg-blue-500/20 text-blue-400'} disabled:opacity-30`}
-                                                >
-                                                    {isMuted ? '🔇' : '🔊'}
-                                                </button>
                                             </div>
 
                                             <div className="flex gap-2">
-                                                {capabilities?.controls.microphone && <button
-                                                    disabled={!isPlaying}
-                                                    onClick={() => setMicActive(!micActive)}
-                                                    className={`px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${micActive ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-white/5 text-gray-400 hover:bg-white/10'} disabled:opacity-30`}
-                                                >
-                                                    🎤 Mic
-                                                </button>}
                                                 {capabilities?.controls.lightControl && <button
                                                     onClick={() => handleExecuteAction('light', lightActive)}
                                                     className={`px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${lightActive ? 'bg-yellow-400/20 text-yellow-400 border border-yellow-400/30' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
@@ -494,6 +566,7 @@ export function CameraList({ cameras, capabilities: sysCaps, onDelete, onRefresh
                                                 >
                                                     🚨 Sirena
                                                 </button>}
+                                                <span className="text-[9px] text-gray-600 font-mono self-center">Snapshot Polling · Fase A</span>
                                             </div>
                                         </div>
                                     </div>

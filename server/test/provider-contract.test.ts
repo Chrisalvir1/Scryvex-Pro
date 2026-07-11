@@ -372,14 +372,15 @@ describe('MediaSourceSelector', () => {
         assert.ok((selected.width ?? 0) <= 1920, `selected profile width must be <= 1920, got ${selected.width}`);
     });
 
-    it('selectForSnapshot picks highest resolution', () => {
+    it('selectForSnapshot picks preferred preview profile (lowest cost valid profile)', () => {
         const sources = [
-            { descriptor: makeSrc({ id: '1080p' }), profile: { id: '1080p', width: 1920, height: 1080, validationStatus: 'valid' as const }, probeSucceeded: true },
-            { descriptor: makeSrc({ id: '4k' }), profile: { id: '4k', width: 3840, height: 2160, validationStatus: 'valid' as const }, probeSucceeded: true },
+            { descriptor: makeSrc({ id: '1080p' }), profile: { id: '1080p', width: 1920, height: 1080, normalizedCodec: 'H264', validationStatus: 'valid' as const }, probeSucceeded: true },
+            { descriptor: makeSrc({ id: '4k' }), profile: { id: '4k', width: 3840, height: 2160, normalizedCodec: 'H264', validationStatus: 'valid' as const }, probeSucceeded: true },
         ];
         const selected = selector.selectForSnapshot(sources);
         assert.ok(selected, 'must select a profile');
-        assert.equal(selected.id, '4k');
+        // Snapshot uses same logic as preview: prefer lower-res substream over 4K main stream
+        assert.equal(selected.id, '1080p', 'should pick 1080p H264 over 4K to avoid hammering main stream');
     });
 });
 
