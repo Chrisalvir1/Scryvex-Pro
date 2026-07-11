@@ -1,6 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { CoreServiceFacade } from '../../core/CoreServiceFacade';
 
+function publicError(error: unknown): string {
+    const message = error instanceof Error ? error.message : 'Unexpected error';
+    return message.replace(/([a-z][a-z0-9+.-]*:\/\/)([^@\s/]+)@/gi, '$1***:***@').slice(0, 512);
+}
+
 export function createScryptedRouter(coreService: CoreServiceFacade): Router {
     const router = Router();
     
@@ -18,8 +23,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
         try {
             const plugins = await coreService.listPlugins();
             res.json({ plugins });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed to fetch plugins', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed to fetch plugins', detail: publicError(err) });
         }
     });
 
@@ -28,8 +33,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
         try {
             const { devices, errors } = await coreService.listDevices();
             res.json({ devices, errors });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed to fetch devices', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed to fetch devices', detail: publicError(err) });
         }
     });
 
@@ -42,8 +47,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
                 return;
             }
             res.json({ device });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed to fetch device', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed to fetch device', detail: publicError(err) });
         }
     });
 
@@ -53,8 +58,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
             const device = await coreService.getDevice(deviceId);
             if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
             res.json({ interfaces: device.interfaces });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed', detail: publicError(err) });
         }
     });
 
@@ -64,8 +69,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
             const device = await coreService.getDevice(deviceId);
             if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
             res.json({ settings: device.settings });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed', detail: publicError(err) });
         }
     });
 
@@ -75,8 +80,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
             const device = await coreService.getDevice(deviceId);
             if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
             res.json({ mediaOptions: device.media.options });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed', detail: publicError(err) });
         }
     });
 
@@ -86,8 +91,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
             const device = await coreService.getDevice(deviceId);
             if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
             res.json({ capabilities: device.capabilities });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed', detail: publicError(err) });
         }
     });
 
@@ -97,8 +102,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
             const device = await coreService.getDevice(deviceId);
             if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
             res.json({ diagnostics: device.diagnostics });
-        } catch (err: any) {
-            res.status(500).json({ error: 'Failed', detail: err.message });
+        } catch (err: unknown) {
+            res.status(500).json({ error: 'Failed', detail: publicError(err) });
         }
     });
 

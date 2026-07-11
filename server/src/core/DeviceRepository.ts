@@ -37,11 +37,10 @@ export class DeviceRepository {
             if (res.status === 'fulfilled' && res.value) {
                 models.push(res.value);
             } else if (res.status === 'rejected') {
-                const errReason = res.reason as Error | { message?: string };
                 errors.push({
                     deviceId: ids[index]!,
                     code: 'DEVICE_SNAPSHOT_FAILED',
-                    message: errReason?.message || 'Unknown error'
+                    message: this.toPublicError(res.reason)
                 });
             }
         });
@@ -78,5 +77,12 @@ export class DeviceRepository {
         const model = this.factory.buildFromSnapshot(snapshot);
         this.cache.set(id, { model, timestamp: Date.now() });
         return model;
+    }
+
+    private toPublicError(error: unknown): string {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return message
+            .replace(/([a-z][a-z0-9+.-]*:\/\/)([^@\s/]+)@/gi, '$1***:***@')
+            .slice(0, 512);
     }
 }

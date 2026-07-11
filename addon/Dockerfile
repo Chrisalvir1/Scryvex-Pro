@@ -32,10 +32,13 @@ WORKDIR /usr/src/app
 
 # 5. Configurar el origen de código (version + ref exacto)
 ARG BUILD_VERSION
-ARG SOURCE_REF
+# Home Assistant only supplies BUILD_VERSION from config.yaml. Version labels
+# are not necessarily Git refs during alpha/beta builds, so use main unless CI
+# explicitly supplies a branch, tag or immutable SHA through SOURCE_REF.
+ARG SOURCE_REF=main
 
 RUN set -eux; \
-    REF="${SOURCE_REF:-${BUILD_VERSION}}"; \
+    REF="${SOURCE_REF}"; \
     echo "Building Scryvex ${BUILD_VERSION} from ${REF}"; \
     git init .; \
     git remote add origin https://github.com/Chrisalvir1/Scryvex-Pro-V2.git; \

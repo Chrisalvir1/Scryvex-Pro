@@ -49,13 +49,14 @@ export class DeviceModelFactory {
         return message.replace(/(https?:\/\/)([^@]+)@/gi, '$1***:***@');
     }
 
-    private stableStringify(obj: any): string {
+    private stableStringify(obj: unknown): string {
         if (obj === null || obj === undefined) return 'null';
         if (typeof obj !== 'object') return JSON.stringify(obj);
         if (Array.isArray(obj)) {
             return '[' + obj.map(item => this.stableStringify(item)).join(',') + ']';
         }
         
+        if (!this.isRecord(obj)) return JSON.stringify(String(obj));
         const keys = Object.keys(obj).sort();
         const parts = keys.map(key => {
             return JSON.stringify(key) + ':' + this.stableStringify(obj[key]);
@@ -74,11 +75,17 @@ export class DeviceModelFactory {
             interfaces: [...snapshot.interfaces].sort(),
             settings: settings,
             mediaOptions: mediaOptions,
-            readErrors: snapshot.readErrors
+            // occurredAt identifies a particular read, not device state. Including it
+            // would change revision on every identical failing request.
+            readErrors: snapshot.readErrors.map(({ source, code, message }) => ({ source, code, message }))
         };
         
         const json = this.stableStringify(stableContent);
         return crypto.createHash('sha256').update(json).digest('hex').substring(0, 12);
+    }
+
+    private isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
     }
 
     private normalizeCapabilities(interfaces: string[]): string[] {
