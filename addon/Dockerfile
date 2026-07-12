@@ -1,6 +1,16 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base-debian:bookworm
 FROM $BUILD_FROM
 
+ARG BUILD_VERSION
+ARG TARGETARCH
+
+LABEL \
+    io.hass.version="${BUILD_VERSION}" \
+    io.hass.type="addon" \
+    io.hass.arch="${TARGETARCH}" \
+    org.opencontainers.image.source="https://github.com/Chrisalvir1/Scryvex-Pro-V2" \
+    org.opencontainers.image.version="${BUILD_VERSION}" \
+    org.opencontainers.image.title="Scryvex Pro"
 # 1. Instalar dependencias base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \

@@ -1,8 +1,9 @@
 name: "Scryvex Pro"
-version: "3.0.0-alpha.1"
+version: "3.0.0-alpha.2"
 slug: "scryvex_pro_final"
 description: "Plataforma universal de administración para Scrypted — versión alfa"
 url: "https://github.com/Chrisalvir1/Scryvex-Pro-V2"
+image: ghcr.io/chrisalvir1/scryvex-pro-v2
 arch:
   - aarch64
   - amd64
