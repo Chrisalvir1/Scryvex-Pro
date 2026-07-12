@@ -9,6 +9,8 @@ import { MediaProbeService } from './media-probe';
 import { ConnectionSecretStore } from './credential-store';
 import { ChildProcess } from 'child_process';
 import { classifyMediaError } from '../cameras/camera-adapter';
+import { CameraProbe } from '../api/camera-probe';
+import { CameraService } from '../api/camera-service';
 
 export class PreviewService {
     private activeSessions = new Map<string, ChildProcess>();
@@ -20,16 +22,16 @@ export class PreviewService {
         private mediaProbe: MediaProbeService,
         private resolverRegistry: MediaInputResolverRegistry,
         private secretStore: ConnectionSecretStore,
-        private runner: IMediaProcessRunner = new DefaultMediaProcessRunner()
+        public readonly runner: IMediaProcessRunner = new DefaultMediaProcessRunner()
     ) {}
 
     /**
      * B4: Resolves real ProbedMediaSource from CameraProbe DB data, or runs an
      * inline probe if no validated profiles exist yet.  No fake { id } profiles.
      */
-    private async resolveProfile(
+    public async resolveProfile(
         deviceId: string,
-        cameraProbe: import('../api/camera-probe').CameraProbe,
+        cameraProbe: CameraProbe,
         signal?: AbortSignal
     ): Promise<ProbedMediaSource> {
         // 1. Try to get cached probed sources from DB
@@ -185,7 +187,7 @@ export class PreviewService {
                     'Pragma': 'no-cache',
                 });
 
-                void cameraService.recordLog(deviceId, 'camera.preview.started', { sourceId, pluginId });
+                void cameraService.recordLog(deviceId, 'preview.ffmpeg.started', { sourceId, pluginId });
 
                 const args = [
                     '-hide_banner', '-loglevel', 'error',
@@ -231,7 +233,10 @@ export class PreviewService {
                     this.activeSessions.delete(correlationId);
                 };
 
-                res.on('close', cleanup);
+                res.on('close', () => {
+                    void cameraService.recordLog(deviceId, 'preview.client_disconnected', { sourceId });
+                    cleanup();
+                });
                 sig?.addEventListener('abort', cleanup, { once: true });
 
                 promise.then(async (result) => {
@@ -240,20 +245,20 @@ export class PreviewService {
 
                     if (result.exitCode !== 0 && result.exitCode !== null) {
                         const category = classifyMediaError(result.stderr, result.exitCode);
-                        void cameraService.recordLog(deviceId, 'camera.preview.failed', {
+                        void cameraService.recordLog(deviceId, 'preview.failed', {
                             exitCode: result.exitCode, category, stderr: result.stderr.slice(0, 256), stdoutBytes: result.stdoutBytes, durationMs: result.durationMs, sourceId, profileId: source.profile.id, codec: source.profile.codec
                         });
                         return reject(new MediaOperationError(result.stderr || `FFmpeg terminó con código ${result.exitCode}`, category));
                     }
 
                     if (result.stdoutBytes === 0) {
-                        void cameraService.recordLog(deviceId, 'camera.preview.failed', {
+                        void cameraService.recordLog(deviceId, 'preview.failed', {
                             exitCode: result.exitCode, category: 'invalid_media', stderr: result.stderr.slice(0, 256), stdoutBytes: result.stdoutBytes, durationMs: result.durationMs, sourceId, profileId: source.profile.id, codec: source.profile.codec
                         });
                         return reject(new MediaOperationError('FFmpeg terminó sin producir datos MJPEG', 'invalid_media'));
                     }
 
-                    void cameraService.recordLog(deviceId, 'camera.preview.terminated', { durationMs: result.durationMs, stdoutBytes: result.stdoutBytes });
+                    void cameraService.recordLog(deviceId, 'preview.terminated', { durationMs: result.durationMs, stdoutBytes: result.stdoutBytes });
                     resolve();
                 }).catch(err => {
                     console.error(`[PreviewService] MJPEG error [${correlationId}]:`, err);
@@ -273,7 +278,7 @@ export class PreviewService {
                     resetWatchdog();
                     if (!firstFrameLogged) {
                         firstFrameLogged = true;
-                        void cameraService.recordLog(deviceId, 'camera.preview.first_frame', { sourceId, profileId: source.profile.id });
+                        void cameraService.recordLog(deviceId, 'preview.first_jpeg', { sourceId, profileId: source.profile.id });
                     }
                     return origWrite.apply(res, a as any);
                 };

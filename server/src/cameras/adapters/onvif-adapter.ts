@@ -305,17 +305,17 @@ export class OnvifAdapter implements CameraMediaProvider, DeviceControlProvider,
         for (const port of candidatePorts) {
             if (signal?.aborted) break;
 
-            const result = {
+            const result: any = {
                 port,
                 tcpReachable: false,
                 onvifHandshake: false,
                 authentication: 'invalid',
                 profiles: 0,
+                error: null,
             };
 
             try {
-                // Quick TCP check first (optional, but connectCamRaw takes time)
-                result.tcpReachable = true; // Assume true if connectCamRaw tries
+                result.tcpReachable = true;
 
                 const cam = await this.connectCamRaw(host, port, username, password, signal);
                 result.onvifHandshake = true;
@@ -328,16 +328,24 @@ export class OnvifAdapter implements CameraMediaProvider, DeviceControlProvider,
                 detectedPort = port;
                 break; // Stop at first successful port
             } catch (err: any) {
-                // Simple heuristic for authentication failures vs connection failures
-                if (err.message && err.message.toLowerCase().includes('unauthorized')) {
+                const msg = err.message || String(err);
+                if (msg.toLowerCase().includes('unauthorized')) {
                     result.tcpReachable = true;
                     result.onvifHandshake = true;
                     result.authentication = 'invalid';
-                } else if (err.message && (err.message.includes('ECONNREFUSED') || err.message.includes('EHOSTUNREACH'))) {
+                    result.error = 'unauthorized';
+                } else if (msg.includes('ECONNREFUSED')) {
                     result.tcpReachable = false;
+                    result.error = 'ECONNREFUSED';
+                } else if (msg.includes('EHOSTUNREACH')) {
+                    result.tcpReachable = false;
+                    result.error = 'EHOSTUNREACH';
+                } else if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('etimedout')) {
+                    result.tcpReachable = false;
+                    result.error = 'timeout';
                 } else {
-                    // Handshake failed or other error
                     result.tcpReachable = true;
+                    result.error = msg;
                 }
                 results.push(result);
             }

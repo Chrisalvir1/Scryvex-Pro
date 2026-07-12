@@ -1,6 +1,6 @@
 {
    "name": "@scrypted/scrypted-remote",
-   "version": "0.0.1",
+   "version": "3.0.0-alpha.9",
    "description": "Scrypted Remote Plugin",
    "scripts": {
       "scrypted-setup-project": "scrypted-setup-project",

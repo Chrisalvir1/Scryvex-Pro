@@ -1,6 +1,6 @@
 {
   "name": "@scrypted/stream-promise",
-  "version": "0.0.2",
+  "version": "3.0.0-alpha.9",
   "description": "",
   "main": "dist/index.js",
   "scripts": {

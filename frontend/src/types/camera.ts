@@ -2,7 +2,7 @@
 // Keep these in sync with server/src/api/camera-service.ts
 
 export type CameraProtocol = 'RTSP' | 'ONVIF' | 'OTHER';
-export type CameraStatus   = 'online' | 'offline' | 'unknown';
+export type CameraStatus   = 'online' | 'offline' | 'unknown' | 'searching_new_ip' | 'ip_changed' | 'reconnecting' | 'ambiguous_match';
 export type DiscoveryStatus = 'pending' | 'discovering' | 'online' | 'offline' | 'authentication_failed' | 'unsupported' | 'error';
 export interface StreamProfile { id: string; name?: string; codec?: string; width?: number; height?: number; fps?: number; bitrate?: number; streamUri?: string; snapshotUri?: string; }
 export interface CameraCapabilities {
@@ -25,6 +25,13 @@ export interface Camera {
     ip?: string; // fallback
     port?: number; // fallback
     config: Record<string, unknown>;
+    
+    // Identity Tracking
+    mac_address?: string;
+    onvif_uuid?: string;
+    last_known_ip?: string;
+    network_interface?: string;
+    identity_status?: CameraStatus;
     
     // HKSV Specifics
     hksv_codecs?: string[];

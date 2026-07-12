@@ -1,6 +1,6 @@
 {
    "name": "@scrypted/homekit",
-   "version": "1.2.65",
+   "version": "3.0.0-alpha.9",
    "description": "HomeKit Plugin for Scrypted",
    "scripts": {
       "scrypted-setup-project": "scrypted-setup-project",

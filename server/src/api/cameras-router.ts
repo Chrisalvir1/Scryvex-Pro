@@ -43,10 +43,11 @@ export function createCamerasRouter(
         sessionManager: import('../media/media-session-manager').MediaSourceSessionManager;
         selector: import('../media/media-selector').MediaSourceSelector;
         ffmpegRunner: import('../media/media-process-runner').IMediaProcessRunner;
-        liveSessionManager: import('../media/live-media-session').LiveMediaSessionManager;
+        liveSessionManager: any;
+        webrtcSessionManager?: import('../media/rtp/webrtc-session-manager').WebRTCSessionManager;
     }
 ): Router {
-    const { probeService, previewService, onvifAdapter, providerRegistry, resolverRegistry, secretStore, mediaProbe, sessionManager, liveSessionManager } = services;
+    const { probeService, previewService, onvifAdapter, providerRegistry, resolverRegistry, secretStore, mediaProbe, sessionManager, liveSessionManager, webrtcSessionManager } = services;
     const router = Router();
     const streamController = new CameraStreamController(cameraService);
 
@@ -261,23 +262,6 @@ export function createCamerasRouter(
 
     // ── Preview / Snapshot ────────────────────────────────────────────────────
 
-    router.get('/:id/preview/frame.jpg', async (req, res) => {
-        try {
-            await cameraService.recordLog(String(req.params.id), 'camera.preview.requested', { type: 'frame' });
-
-            // B9: migrated to PreviewService.getFrame — no execFile
-            const frameBuffer = await previewService.getFrame(String(req.params.id), probeService, cameraService);
-
-            res.setHeader('Content-Type', 'image/jpeg');
-            res.setHeader('Cache-Control', 'no-store, no-cache');
-            res.send(frameBuffer);
-
-            void cameraService.recordLog(String(req.params.id), 'camera.preview.frame.succeeded');
-        } catch (error) {
-            res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
-        }
-    });
-
     // ── /preview/frame.jpg — finite JPEG, Content-Length, abort-aware ─────────
     router.get('/:id/preview/frame.jpg', async (req, res) => {
         const ac = new AbortController();
@@ -344,6 +328,7 @@ export function createCamerasRouter(
 
     router.get('/:id/preview.mjpeg', async (req, res) => {
         try {
+            await cameraService.recordLog(String(req.params.id), 'preview.requested', { type: 'mjpeg' });
             await previewService.startMjpeg(String(req.params.id), res, probeService, cameraService);
         } catch (error) {
             if (!res.headersSent) {
@@ -441,6 +426,54 @@ export function createCamerasRouter(
             liveSessionManager.removeConsumer(id, profileId, sessionId);
         }
         res.json({ success: true });
+    });
+
+    // ── WebRTC ────────────────────────────────────────────────────────────────
+    
+    router.post('/:id/webrtc/offer', async (req, res) => {
+        try {
+            const camera = await cameraService.findById(req.params.id);
+            if (!camera) { res.status(404).json({ error: 'Camera not found' }); return; }
+
+            const { sdp, type } = req.body;
+            if (!sdp || !type) { res.status(400).json({ error: 'Missing sdp or type' }); return; }
+
+            if (!webrtcSessionManager) {
+                res.status(501).json({ error: 'WebRTC not enabled on server' }); return;
+            }
+
+            const result = await webrtcSessionManager.createOffer(
+                camera.id,
+                { sdp, type: type as any },
+                probeService
+            );
+
+            // Requisitos finales:
+            // sessionId, SDP answer, codec negociado, estado ICE
+            res.json({
+                sessionId: result.sessionId,
+                sdp: result.sdp,
+                type: result.type,
+                codec: result.codec,
+                iceState: 'new'
+            });
+        } catch (error) {
+            res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+        }
+    });
+
+    router.post('/:id/webrtc/candidate/:sessionId', async (req, res) => {
+        try {
+            if (!webrtcSessionManager) {
+                res.status(501).json({ error: 'WebRTC not enabled' }); return;
+            }
+            const { candidate, sdpMid, sdpMLineIndex } = req.body;
+            await webrtcSessionManager.addIceCandidate(req.params.sessionId, { candidate, sdpMid, sdpMLineIndex });
+            res.json({ success: true });
+        } catch (error) {
+            // El endpoint de candidatos debe rechazar candidatos pertenecientes a otra sesión.
+            res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+        }
     });
 
     // ── Stream Controls ───────────────────────────────────────────────────────

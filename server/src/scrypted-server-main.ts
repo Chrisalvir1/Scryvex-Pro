@@ -55,6 +55,8 @@ import { OnvifAdapter } from './cameras/adapters/onvif-adapter';
 import { LegacyPluginMediaProviderAdapter, PluginMediaObjectResolver } from './cameras/adapters/legacy-plugin-adapter';
 import { MediaProbeService } from './media/media-probe';
 import { MediaOperationError } from './media/media-source';
+import { CameraIdentityTracker } from './discovery/camera-identity-tracker';
+import { WebRTCSessionManager } from './media/rtp/webrtc-session-manager';
 
 export type Runtime = ScryptedRuntime;
 
@@ -906,7 +908,8 @@ async function start(mainFilename: string, options?: {
 
     const selector = new MediaSourceSelector();
     const mediaProbe = new MediaProbeService();
-    const probeService = new CameraProbe(cameraService, providerRegistry, mediaProbe, resolverRegistry, secretStore);
+    const identityTracker = new CameraIdentityTracker(cameraService);
+    const probeService = new CameraProbe(cameraService, providerRegistry, mediaProbe, resolverRegistry, secretStore, identityTracker);
     // B4: PreviewService now receives mediaProbe, resolverRegistry, secretStore — no simulation
     const previewService = new PreviewService(
         sessionManager, selector, providerRegistry, mediaProbe, resolverRegistry, secretStore
@@ -915,6 +918,8 @@ async function start(mainFilename: string, options?: {
     // Live Media Session Manager para Fase 1 Subfase A (HLS RC1)
     const { LiveMediaSessionManager } = await import('./media/live-media-session.js');
     const liveSessionManager = new LiveMediaSessionManager(sessionManager, (previewService as any).runner);
+
+    const webrtcSessionManager = new WebRTCSessionManager(cameraService, previewService, sessionManager);
 
     // ---------------------------------------
 
@@ -932,6 +937,7 @@ async function start(mainFilename: string, options?: {
         selector,
         ffmpegRunner: (previewService as any).runner,
         liveSessionManager,
+        webrtcSessionManager,
     }));
     
     const pluginRepository = new PluginRepository(scrypted);

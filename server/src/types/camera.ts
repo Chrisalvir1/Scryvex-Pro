@@ -4,7 +4,7 @@
 import type { CameraCapabilities, DiscoveryStatus, StreamProfile, CapabilityEvidence } from '../cameras/camera-adapter';
 
 export type CameraProtocol = 'RTSP' | 'ONVIF' | 'OTHER';
-export type CameraStatus   = 'online' | 'offline' | 'unknown';
+export type CameraStatus   = 'online' | 'offline' | 'unknown' | 'searching_new_ip' | 'ip_changed' | 'reconnecting' | 'ambiguous_match';
 
 export interface Camera {
     id: string;
@@ -19,6 +19,13 @@ export interface Camera {
     codec?: string;
     config: Record<string, unknown>;
     
+    // Identity Tracking
+    mac_address?: string;
+    onvif_uuid?: string;
+    last_known_ip?: string;
+    network_interface?: string;
+    identity_status?: CameraStatus;
+
     // HKSV Specifics
     hksv_codecs?: string[];
     hksv_video_tiers?: Record<string, unknown>;

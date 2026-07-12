@@ -35,9 +35,9 @@
       "smtp-server": "^3.12.0"
    },
    "devDependencies": {
-      "@types/node": "^18.16.19",
       "@types/mailparser": "^3.4.0",
+      "@types/node": "^18.16.19",
       "@types/smtp-server": "^3.5.7"
    },
-   "version": "0.0.12"
+   "version": "3.0.0-alpha.9"
 }

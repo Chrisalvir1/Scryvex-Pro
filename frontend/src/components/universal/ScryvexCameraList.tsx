@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Camera } from '../../types/camera';
 import { apiUrl } from '../../lib/ingress-url';
+import { WebRTCPlayer } from './WebRTCPlayer';
 
 export function ScryvexCameraList({ cameras, loading, error, onRefresh, onAddCamera, onEditCamera }: { 
     cameras: Camera[], 
@@ -176,24 +177,35 @@ export function ScryvexCameraList({ cameras, loading, error, onRefresh, onAddCam
                                 </div>
                                 <div className="flex-1 min-h-[200px] bg-black flex items-center justify-center relative">
                                     {(selectedCamera.capabilities?.preview?.snapshot || selectedCamera.capabilities?.preview?.mjpeg) ? (
-                                        <img 
-                                            key={previewKey}
-                                            src={apiUrl(`/api/cameras/${selectedCamera.id}/${liveMode ? 'preview.mjpeg' : 'preview/frame.jpg'}?t=${previewKey}`)} 
-                                            alt="Camera Preview" 
-                                            className="w-full h-full object-contain"
-                                            onError={(e) => {
-                                                const target = e.target as HTMLImageElement;
-                                                target.onerror = null;
-                                                if (liveMode) {
+                                        liveMode && !liveError ? (
+                                            <WebRTCPlayer 
+                                                cameraId={selectedCamera.id} 
+                                                onError={() => {
                                                     setLiveError(true);
                                                     setLiveMode(false);
                                                     setPreviewKey(k => k + 1);
-                                                } else {
-                                                    target.src = '';
-                                                    target.parentElement!.innerHTML = '<div class="text-xs text-red-400 p-4 text-center">Error al cargar preview</div>';
-                                                }
-                                            }}
-                                        />
+                                                }}
+                                            />
+                                        ) : (
+                                            <img 
+                                                key={previewKey}
+                                                src={apiUrl(`/api/cameras/${selectedCamera.id}/${liveMode && !liveError ? 'preview.mjpeg' : 'preview/frame.jpg'}?t=${previewKey}`)} 
+                                                alt="Camera Preview" 
+                                                className="w-full h-full object-contain"
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.onerror = null;
+                                                    if (liveMode) {
+                                                        setLiveError(true);
+                                                        setLiveMode(false);
+                                                        setPreviewKey(k => k + 1);
+                                                    } else {
+                                                        target.src = '';
+                                                        target.parentElement!.innerHTML = '<div class="text-xs text-red-400 p-4 text-center">Error al cargar preview</div>';
+                                                    }
+                                                }}
+                                            />
+                                        )
                                     ) : (
                                         <div className="text-xs text-gray-600">Sin preview disponible</div>
                                     )}

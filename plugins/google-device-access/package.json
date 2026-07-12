@@ -37,9 +37,9 @@
       ]
    },
    "dependencies": {
-      "@scrypted/sdk": "file:../../sdk",
-      "@scrypted/common": "file:../../common",
       "@googleapis/smartdevicemanagement": "^1.0.0",
+      "@scrypted/common": "file:../../common",
+      "@scrypted/sdk": "file:../../sdk",
       "axios": "^1.4.0",
       "client-oauth2": "^4.3.3",
       "lodash": "^4.17.21"
@@ -49,5 +49,5 @@
       "@types/lodash": "^4.14.195",
       "@types/node": "^20.4.1"
    },
-   "version": "0.0.99"
+   "version": "3.0.0-alpha.9"
 }

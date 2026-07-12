@@ -7,6 +7,7 @@ import { MediaInputResolverRegistry } from '../media/media-resolvers';
 import { ConnectionSecretStore } from '../media/credential-store';
 import { CameraCapabilities, StreamProfile } from '../cameras/camera-adapter';
 import { ProbedMediaSource } from '../media/media-source';
+import { CameraIdentityTracker } from '../discovery/camera-identity-tracker';
 
 export class CameraProbe {
     constructor(
@@ -14,7 +15,8 @@ export class CameraProbe {
         private readonly providerRegistry: CameraProviderRegistry,
         private readonly mediaProbe: MediaProbeService,
         private readonly resolverRegistry: MediaInputResolverRegistry,
-        private readonly secretStore: ConnectionSecretStore
+        private readonly secretStore: ConnectionSecretStore,
+        private readonly identityTracker?: CameraIdentityTracker
     ) {}
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -244,6 +246,17 @@ export class CameraProbe {
 
             await this.cameraService.updateDiscovery(cameraId, 'error', undefined, undefined, message);
             await this.cameraService.recordLog(cameraId, 'camera.discovery.failed', { message });
+            
+            // If we have an identity tracker and the error implies offline/timeout
+            if (this.identityTracker && (message.includes('timeout') || message.includes('ECONNREFUSED') || message.includes('offline'))) {
+                const camera = await this.cameraService.findById(cameraId);
+                if (camera) {
+                    this.identityTracker.resolveOfflineIdentity(camera).catch(e => {
+                        console.error(`[CameraProbe] Failed to run identity tracker in background:`, e);
+                    });
+                }
+            }
+
             throw error;
         }
     }
