@@ -1,6 +1,7 @@
 import { RTCPeerConnection, RTCRtpCodecParameters, MediaStreamTrack, RTCSessionDescription, RtpPacket } from 'werift';
 import dgram from 'dgram';
 import { randomUUID } from 'crypto';
+import os from 'os';
 import { CameraService } from '../../api/camera-service';
 import { CameraProbe } from '../../api/camera-probe';
 import { PreviewService } from '../preview-service';
@@ -51,6 +52,20 @@ export class WebRTCSessionManager {
         }
     }
 
+    private hasValidLanIp(): boolean {
+        const nets = os.networkInterfaces();
+        for (const name of Object.keys(nets)) {
+            for (const net of nets[name]!) {
+                if (net.family === 'IPv4' && !net.internal) {
+                    if (!net.address.startsWith('172.30.') && !net.address.startsWith('127.')) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     async createOffer(
         cameraId: string, 
         offer: { sdp: string, type: 'offer' | 'pranswer' | 'answer' | 'rollback' }, 
@@ -60,6 +75,13 @@ export class WebRTCSessionManager {
         const startTime = Date.now();
         
         this.log(sessionId, 'webrtc.offer.received', { cameraId });
+
+        if (!this.hasValidLanIp()) {
+            this.log(sessionId, 'webrtc.failed', { reason: 'ICE_CANDIDATE_UNREACHABLE' });
+            const error: any = new Error('No existe IP LAN alcanzable desde el host.');
+            error.code = 'ICE_CANDIDATE_UNREACHABLE';
+            throw error;
+        }
 
         // 1. Validating source (synchronous check before accepting WebRTC)
         let source;
@@ -162,9 +184,22 @@ export class WebRTCSessionManager {
         this.transition(sessionId, 'answer_created');
         this.log(sessionId, 'webrtc.answer.created');
 
+        // Filter out internal Docker/loopback IPs from SDP candidates
+        const filteredSdp = (pc.localDescription?.sdp || '')
+            .split('\r\n')
+            .filter(line => {
+                if (line.startsWith('a=candidate:')) {
+                    if (line.includes(' 172.30.') || line.includes(' 127.')) {
+                        return false;
+                    }
+                }
+                return true;
+            })
+            .join('\r\n');
+
         return {
             sessionId,
-            sdp: pc.localDescription?.sdp || '',
+            sdp: filteredSdp,
             type: pc.localDescription?.type || 'answer',
             codec: 'H264'
         };
