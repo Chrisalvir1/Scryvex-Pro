@@ -1,5 +1,8 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base-debian:bookworm
-FROM $BUILD_FROM
+ARG TARGETARCH
+FROM ghcr.io/home-assistant/aarch64-base-debian:bookworm AS base-arm64
+FROM ghcr.io/home-assistant/amd64-base-debian:bookworm AS base-amd64
+
+FROM base-${TARGETARCH}
 
 ARG BUILD_VERSION
 ARG TARGETARCH
