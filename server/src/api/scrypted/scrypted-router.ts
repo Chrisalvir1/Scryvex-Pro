@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { CoreServiceFacade } from '../../core/CoreServiceFacade';
+import { instrumentRequest } from '../instrumentation';
 
 function publicError(error: unknown): string {
     const message = error instanceof Error ? error.message : 'Unexpected error';
@@ -29,7 +30,8 @@ export function createScryptedRouter(coreService: CoreServiceFacade): Router {
     });
 
     // ── Devices (DeviceModel Projection) ──────────────────────────────────────
-    router.get('/devices', async (_req: Request, res: Response) => {
+    router.get('/devices', async (req: Request, res: Response) => {
+        instrumentRequest(req, res);
         try {
             const { devices, errors } = await coreService.listDevices();
             res.json({ devices, errors });

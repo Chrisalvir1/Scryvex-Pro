@@ -48,12 +48,80 @@ function DiagnosticsBanner() {
     );
 }
 
-function UniversalApp() {
-    const { devices, loading: loadingDevices, error: errorDevices, refetch: refetchDevices } = useUniversalDevices();
+function NativeCamerasView() {
     const { cameras, loading, error, refetch, addCamera, updateCamera } = useScryvexCameras();
-    const [currentView, setCurrentView] = useState<'cameras' | 'scrypted' | 'plugins'>('cameras');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingCamera, setEditingCamera] = useState<import('./types/camera').Camera | null>(null);
+
+    return (
+        <div className="flex-1 flex flex-col w-full h-full relative">
+            {loading && (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 flex-1">
+                    <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                    <p className="text-sm text-gray-500">Cargando cámaras nativas...</p>
+                </div>
+            )}
+            {!loading && error && (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center flex-1">
+                    <span className="text-4xl">⚠️</span>
+                    <h2 className="text-lg font-semibold text-red-400">Error</h2>
+                    <p className="text-sm text-gray-500 max-w-sm">{error}</p>
+                    <button onClick={refetch} className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded mt-4 transition-colors text-sm font-bold">Reintentar</button>
+                </div>
+            )}
+            {!loading && !error && (
+                <div className="flex-1 overflow-hidden h-full">
+                    <ScryvexCameraList
+                        cameras={cameras}
+                        loading={loading}
+                        error={error}
+                        onRefresh={refetch}
+                        onAddCamera={() => setShowAddModal(true)}
+                        onEditCamera={setEditingCamera}
+                    />
+                </div>
+            )}
+            {showAddModal && <AddCameraModal onClose={() => setShowAddModal(false)} onAdd={addCamera} />}
+            {editingCamera && <EditCameraModal camera={editingCamera} onClose={() => setEditingCamera(null)} onSave={updateCamera} />}
+        </div>
+    );
+}
+
+function InternalScryptedView() {
+    const { devices, loading, error, refetch } = useUniversalDevices();
+    
+    return (
+        <div className="flex-1 flex flex-col w-full h-full relative">
+            {loading && (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 flex-1">
+                    <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                    <p className="text-sm text-gray-500">Cargando dispositivos universales...</p>
+                </div>
+            )}
+            {!loading && error && (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center flex-1">
+                    <span className="text-4xl">⚠️</span>
+                    <h2 className="text-lg font-semibold text-red-400">Error</h2>
+                    <p className="text-sm text-gray-500 max-w-sm">{error}</p>
+                    <button onClick={refetch} className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded mt-4 transition-colors text-sm font-bold">Reintentar</button>
+                </div>
+            )}
+            {!loading && !error && (
+                <div className="flex-1 overflow-hidden h-full">
+                    <UniversalDeviceList
+                        devices={devices}
+                        loading={loading}
+                        error={error}
+                        onRefresh={refetch}
+                    />
+                </div>
+            )}
+        </div>
+    );
+}
+
+function UniversalApp() {
+    const [currentView, setCurrentView] = useState<'cameras' | 'scrypted' | 'plugins'>('cameras');
 
     return (
         <div className="min-h-screen bg-[#080c10] text-white flex flex-col">
@@ -69,10 +137,6 @@ function UniversalApp() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-600 font-mono">
-                            {cameras.length} cámara{cameras.length !== 1 ? 's' : ''} en Scryvex
-                        </span>
-
                         <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 mx-4">
                             <button
                                 onClick={() => setCurrentView('cameras')}
@@ -92,44 +156,9 @@ function UniversalApp() {
             </header>
 
             <main className="flex-1 flex flex-col w-full h-full">
-                {loading && (
-                    <div className="flex flex-col items-center justify-center py-24 gap-4 flex-1">
-                        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-                        <p className="text-sm text-gray-500">Cargando dispositivos universales...</p>
-                    </div>
-                )}
-                {!loading && error && (
-                    <div className="flex flex-col items-center justify-center py-24 gap-4 text-center flex-1">
-                        <span className="text-4xl">⚠️</span>
-                        <h2 className="text-lg font-semibold text-red-400">Error</h2>
-                        <p className="text-sm text-gray-500 max-w-sm">{error}</p>
-                    </div>
-                )}
-                {!loading && !error && currentView === 'cameras' && (
-                    <div className="flex-1 overflow-hidden h-full">
-                        <ScryvexCameraList
-                            cameras={cameras}
-                            loading={loading}
-                            error={error}
-                            onRefresh={refetch}
-                            onAddCamera={() => setShowAddModal(true)}
-                            onEditCamera={setEditingCamera}
-                        />
-                    </div>
-                )}
-                {!loadingDevices && !errorDevices && currentView === 'scrypted' && (
-                    <div className="flex-1 overflow-hidden h-full">
-                        <UniversalDeviceList
-                            devices={devices}
-                            loading={loadingDevices}
-                            error={errorDevices}
-                            onRefresh={refetchDevices}
-                        />
-                    </div>
-                )}
+                {currentView === 'cameras' && <NativeCamerasView />}
+                {currentView === 'scrypted' && <InternalScryptedView />}
             </main>
-            {showAddModal && <AddCameraModal onClose={() => setShowAddModal(false)} onAdd={addCamera} />}
-            {editingCamera && <EditCameraModal camera={editingCamera} onClose={() => setEditingCamera(null)} onSave={updateCamera} />}
         </div>
     );
 }
@@ -193,12 +222,34 @@ function LegacyApp() {
 
 export default function App() {
     const [uiMode, setUiMode] = useState<'universal' | 'legacy' | 'loading'>('loading');
+    const [uiConfigWarning, setUiConfigWarning] = useState<string | null>(null);
+
+    const loadUiConfig = () => {
+        setUiMode('loading');
+        setUiConfigWarning(null);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        fetch(apiUrl('/api/system/ui-config'), { signal: controller.signal })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                clearTimeout(timeoutId);
+                setUiMode(data.cameraUi || 'universal');
+            })
+            .catch(err => {
+                clearTimeout(timeoutId);
+                setUiMode('universal');
+                setUiConfigWarning('No fue posible cargar la configuración de UI. Se usó modo nativo.');
+                console.error('ui-config error:', err);
+            });
+    };
 
     useEffect(() => {
-        fetch(apiUrl('/api/system/ui-config'))
-            .then(res => res.json())
-            .then(data => setUiMode(data.cameraUi || 'universal'))
-            .catch(() => setUiMode('universal'));
+        loadUiConfig();
     }, []);
 
     if (uiMode === 'loading') {
@@ -210,5 +261,19 @@ export default function App() {
         );
     }
 
-    return uiMode === 'universal' ? <UniversalApp /> : <LegacyApp />;
+    return (
+        <div className="relative min-h-screen flex flex-col">
+            {uiConfigWarning && (
+                <div className="bg-red-500/20 border-b border-red-500/30 text-red-400 px-6 py-2 text-sm flex items-center justify-center gap-4 z-50">
+                    <span>{uiConfigWarning}</span>
+                    <button onClick={loadUiConfig} className="px-3 py-1 bg-red-500/30 hover:bg-red-500/50 rounded text-xs font-bold uppercase tracking-wider transition-colors">
+                        Reintentar configuración
+                    </button>
+                </div>
+            )}
+            <div className="flex-1 flex flex-col w-full">
+                {uiMode === 'universal' ? <UniversalApp /> : <LegacyApp />}
+            </div>
+        </div>
+    );
 }

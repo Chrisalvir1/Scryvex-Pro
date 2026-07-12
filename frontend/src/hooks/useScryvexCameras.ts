@@ -35,6 +35,7 @@ export function useScryvexCameras(): UseScryvexCamerasReturn {
     const wsAttempts      = useRef(0);
 
     const fetchCameras = useCallback(async () => {
+        setLoading(true);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -48,14 +49,13 @@ export function useScryvexCameras(): UseScryvexCamerasReturn {
                 setCameras(data.cameras);
                 setError(null);
             }
-        } catch (err: unknown) {
+        } catch (err: any) {
             clearTimeout(timeoutId);
-            const msg = err instanceof Error ? err.message : String(err);
             if (isMounted.current) {
-                if (msg.includes('aborted') || msg.includes('timeout')) {
-                    setError('Timeout al conectar con el servidor (5s).');
+                if (err.name === 'AbortError') {
+                    setError('Tiempo de espera agotado al conectar con cámaras nativas.');
                 } else {
-                    setError(msg);
+                    setError(err.message || String(err));
                 }
             }
         } finally {

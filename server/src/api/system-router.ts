@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { SystemDiagnosticsService } from '../media/system-diagnostics';
+import { instrumentRequest } from './instrumentation';
 
 export function createSystemRouter(): Router {
     const router = Router();
@@ -15,6 +16,7 @@ export function createSystemRouter(): Router {
     });
 
     router.get('/ui-config', (req, res) => {
+        instrumentRequest(req, res);
         const legacyUi = process.env.SCRYVEX_LEGACY_CAMERA_UI === 'true';
         res.json({
             cameraUi: legacyUi ? 'legacy' : 'universal'

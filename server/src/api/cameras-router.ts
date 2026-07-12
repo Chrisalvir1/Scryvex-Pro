@@ -8,7 +8,7 @@ import { PreviewService } from '../media/preview-service';
 import { MatterPairingService } from './matter-pairing';
 import { OnvifAdapter } from '../cameras/adapters/onvif-adapter';
 import { SnapshotFrameCache } from '../media/snapshot-cache';
-
+import { instrumentRequest } from './instrumentation';
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function tcpPortOpen(host: string, port: number, timeoutMs = 1500): Promise<boolean> {
@@ -60,7 +60,8 @@ export function createCamerasRouter(
 
     // ── Cameras CRUD ──────────────────────────────────────────────────────────
 
-    router.get('/', async (_req: Request, res: Response) => {
+    router.get('/', async (req: Request, res: Response) => {
+        instrumentRequest(req, res);
         try {
             const cameras = await cameraService.findAll();
             res.json({ cameras });

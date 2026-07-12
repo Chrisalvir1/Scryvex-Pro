@@ -980,6 +980,9 @@ async function start(mainFilename: string, options?: {
     process.on('unhandledRejection', (reason) => {
         console.error('[Fatal] Unhandled rejection:', reason);
     });
+    process.on('SIGTERM', () => console.log('[System] Received SIGTERM, shutting down...'));
+    process.on('SIGINT', () => console.log('[System] Received SIGINT, shutting down...'));
+    process.on('exit', (code) => console.log(`[System] Process exiting with code: ${code}`));
 
     await listenServerPort('SCRYPTED_SECURE_PORT',   SCRYPTED_SECURE_PORT,   httpsServer);
     await listenServerPort('SCRYPTED_INSECURE_PORT', SCRYPTED_INSECURE_PORT, httpServer);
