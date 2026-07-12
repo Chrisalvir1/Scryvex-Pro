@@ -54,7 +54,7 @@ export class CodecDecisionEngine {
             } else if (inVideoMedia && cleanLine.startsWith('a=rtpmap:')) {
                 // a=rtpmap:<payload_type> <codec>/<clock_rate>
                 const match = cleanLine.match(/a=rtpmap:(\d+)\s+(.+)\/\d+/i);
-                if (match) {
+                if (match && match[1] && match[2]) {
                     const codecName = match[2].toUpperCase();
                     if (searchTerms.some(term => codecName.includes(term))) {
                         payloadTypes.add(match[1]);

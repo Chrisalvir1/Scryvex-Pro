@@ -30,7 +30,7 @@ export function WebRTCPlayer({ cameraId, onError }: WebRTCPlayerProps) {
             if (state === 'checking') setStatus('Conectando ICE');
             else if (state === 'connected') setStatus('Recibiendo RTP');
             else if (state === 'failed' || state === 'disconnected') {
-                handleError('Conexión ICE fallida. Timeout.');
+                handleError('Conexión ICE fallida. El navegador no puede alcanzar los puertos UDP (50000-50050) del contenedor.');
             }
         };
 

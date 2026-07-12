@@ -74,7 +74,12 @@ export class WebRTCSessionManager {
 
         this.log(sessionId, 'webrtc.source.validated', { profileId: source.descriptor.id });
 
-        const pc = new RTCPeerConnection();
+        const pc = new RTCPeerConnection({
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ],
+            icePortRange: [50000, 50050]
+        });
         const track = new MediaStreamTrack({ kind: 'video', codec: new RTCRtpCodecParameters({
             mimeType: 'video/H264',
             clockRate: 90000,

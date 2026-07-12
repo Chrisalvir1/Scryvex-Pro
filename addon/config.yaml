@@ -16,3 +16,5 @@ homeassistant_api: true
 host_network: true
 options: {}
 schema: {}
+ports:
+  "50000-50050/udp": 50000
