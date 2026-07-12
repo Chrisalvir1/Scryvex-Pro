@@ -70,30 +70,40 @@ export class CodecDecisionEngine {
     }
 
     /**
-     * Enforces strict codec policies:
-     * - No automatic transcoding (e.g. H265 -> H264 is forbidden unless explicitly requested)
-     * - Keeps pipelines independent.
-     * - Validates SDP offer to ensure the browser explicitly requested the codec.
+     * Enforces strict codec policies based on the SDP offer from the browser.
+     * User-Agent is NOT used — only what the browser announces in SDP.
+     *
+     * - H.264: universally supported by all WebRTC clients. Always accepted.
+     * - H.265: accepted only if the browser's SDP m=video section explicitly
+     *   includes an a=rtpmap entry for H265, HEVC, or H.265.
+     *   Neither User-Agent nor browser brand determine this — the SDP does.
+     * - No automatic transcoding. Ever.
      */
-    static evaluateWebRtcCompatibility(codec: string, userAgent: string, sdpOffer?: string): { compatible: boolean; reason?: string; errorCode?: number } {
-        const normalized = codec.toUpperCase();
+    static evaluateWebRtcCompatibility(cameraCodec: string, sdpOffer: string): { compatible: boolean; reason?: string; errorCode?: number } {
+        const normalized = cameraCodec.toUpperCase();
+
         if (normalized === 'H264') {
-            if (!this.canBrowserWebRtcRemuxH264(userAgent)) {
-                return { compatible: false, reason: 'El navegador no soporta H.264 por WebRTC.', errorCode: 406 };
-            }
+            // H.264 is the WebRTC baseline; all browsers support it.
             return { compatible: true };
         }
-        
+
         if (normalized === 'H265' || normalized === 'HEVC') {
-            if (!this.canBrowserWebRtcRemuxH265(userAgent)) {
-                return { compatible: false, reason: 'El navegador no puede reproducir este perfil HEVC mediante WebRTC.', errorCode: 406 };
-            }
-            if (sdpOffer && !this.parseSdpForCodec(sdpOffer, 'H265')) {
-                 return { compatible: false, reason: 'Este navegador no puede reproducir HEVC mediante WebRTC.', errorCode: 406 };
+            // H.265 is only usable if the browser explicitly offered it in SDP.
+            if (!this.parseSdpForCodec(sdpOffer, 'H265')) {
+                return {
+                    compatible: false,
+                    reason: 'Este navegador no puede reproducir HEVC mediante WebRTC. La cámara entrega H.265 pero el navegador no lo anunció en su SDP.',
+                    errorCode: 406,
+                };
             }
             return { compatible: true };
         }
 
-        return { compatible: false, reason: `Códec no soportado por WebRTC: ${codec}`, errorCode: 406 };
+        return {
+            compatible: false,
+            reason: `Códec de cámara no soportado por WebRTC: ${cameraCodec}`,
+            errorCode: 406,
+        };
     }
 }
+

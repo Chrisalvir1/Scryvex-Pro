@@ -429,7 +429,7 @@ export function createCamerasRouter(
     });
 
     // ── WebRTC ────────────────────────────────────────────────────────────────
-    
+
     router.post('/:id/webrtc/offer', async (req, res) => {
         try {
             const camera = await cameraService.findById(req.params.id);
@@ -448,20 +448,21 @@ export function createCamerasRouter(
                 probeService
             );
 
-            // Requisitos finales:
-            // sessionId, SDP answer, codec negociado, estado ICE
             res.json({
                 sessionId: result.sessionId,
                 sdp: result.sdp,
                 type: result.type,
                 codec: result.codec,
-                iceState: 'new'
+                audioNote: result.audioNote,
+                iceState: 'gathering',
             });
         } catch (error: any) {
             if (error?.code === 'CAMERA_SOURCE_UNAVAILABLE') {
                 res.status(409).json({ code: error.code, message: error.message });
-            } else if (error?.code === 406 || error?.message?.includes('406')) {
-                res.status(406).json({ error: error.message || 'Not Acceptable' });
+            } else if (error?.code === 'ICE_CANDIDATE_UNREACHABLE') {
+                res.status(503).json({ code: error.code, message: error.message });
+            } else if (error?.code === 406 || error?.errorCode === 406) {
+                res.status(406).json({ code: 'CODEC_INCOMPATIBLE', message: error.message });
             } else {
                 res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
             }
@@ -474,11 +475,15 @@ export function createCamerasRouter(
                 res.status(501).json({ error: 'WebRTC not enabled' }); return;
             }
             const { candidate, sdpMid, sdpMLineIndex } = req.body;
-            await webrtcSessionManager.addIceCandidate(req.params.sessionId, { candidate, sdpMid, sdpMLineIndex });
+            // Validate session belongs to this camera (returns 404 on mismatch — no info leak)
+            await webrtcSessionManager.addIceCandidate(
+                req.params.sessionId,
+                req.params.id,
+                { candidate, sdpMid, sdpMLineIndex }
+            );
             res.json({ success: true });
         } catch (error) {
-            // El endpoint de candidatos debe rechazar candidatos pertenecientes a otra sesión.
-            res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+            res.status(404).json({ error: 'Session not found' });
         }
     });
 
@@ -487,11 +492,18 @@ export function createCamerasRouter(
             if (!webrtcSessionManager) {
                 res.status(501).json({ error: 'WebRTC not enabled' }); return;
             }
-            await webrtcSessionManager.confirmFirstFrame(req.params.sessionId);
+            await webrtcSessionManager.confirmFirstFrame(req.params.sessionId, req.params.id);
             res.json({ success: true });
         } catch (error) {
-            res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+            res.status(404).json({ error: 'Session not found' });
         }
+    });
+
+    // Explicit cleanup — frontend must call this on unmount, camera change, or error.
+    router.delete('/:id/webrtc/:sessionId', async (req, res) => {
+        if (!webrtcSessionManager) { res.status(204).end(); return; }
+        webrtcSessionManager.closeSession(req.params.sessionId, req.params.id);
+        res.status(204).end();
     });
 
     // ── Stream Controls ───────────────────────────────────────────────────────

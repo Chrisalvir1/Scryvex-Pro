@@ -192,6 +192,11 @@ export function ScryvexCameraList({ cameras, loading, error, onRefresh, onAddCam
                                                     setPreviewKey(k => k + 1);
                                                     alert(err.message);
                                                 }}
+                                                onClose={() => {
+                                                    setLiveMode(false);
+                                                    setLiveError(false);
+                                                    setPreviewKey(k => k + 1);
+                                                }}
                                             />
                                         ) : (
                                             <img 
