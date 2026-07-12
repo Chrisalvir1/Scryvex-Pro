@@ -1165,6 +1165,9 @@ importers:
       onnxruntime-node:
         specifier: ^1.27.0
         version: 1.27.0
+      onvif:
+        specifier: ^0.7.4
+        version: 0.7.4
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -8999,6 +9002,7 @@ snapshots:
       node-forge: 1.4.0
       node-gyp: 11.5.0
       onnxruntime-node: 1.27.0
+      onvif: 0.7.4
       pg: 8.22.0
       py: '@bjia56/portable-python@0.1.166'
       semver: 7.8.5
