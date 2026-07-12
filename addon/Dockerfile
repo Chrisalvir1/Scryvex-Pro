@@ -122,5 +122,4 @@ RUN set -eux; \
     test "${MATTERBRIDGE_VERSION}" = "3.9.4"; \
     echo "Node and Matterbridge versions OK"
 
-# 11. Arranque con s6-overlay
-CMD [ "/init" ]
+# 11. Arranque gestionado por Home Assistant Base Image (ENTRYPOINT /init)
