@@ -150,8 +150,8 @@ export function PluginStore() {
     return (
         <div className="p-6 h-full flex flex-col overflow-hidden">
             <div className="mb-6">
-                <h1 className="text-3xl font-bold text-white mb-2">Tienda de Integraciones</h1>
-                <p className="text-gray-400">Descarga e instala plugins para añadir soporte nativo a nuevas cámaras y ecosistemas.</p>
+                <h1 className="text-3xl font-bold text-white mb-2">Plugins oficiales recomendados</h1>
+                <p className="text-gray-400">Catálogo de plugins sugeridos. Las instalaciones se realizan de forma aislada en el volumen de Scryvex Pro.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pb-10 pr-2">

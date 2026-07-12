@@ -9,7 +9,24 @@ function publicError(error: unknown): string {
     return message.replace(/([a-z][a-z0-9+.-]*:\/\/)([^@\s/]+)@/gi, '$1***:***@').slice(0, 512);
 }
 
-const activeSessions = new Map<string, any>();
+const activeSessions = new Map<string, { cameraId: string; control: any; createdAt: number; lastActivityAt: number }>();
+
+// Periodic session cleanup for stale/abandoned sessions
+setInterval(() => {
+    const now = Date.now();
+    const TIMEOUT_MS = 60 * 1000; // 1 minute inactivity timeout
+    for (const [sessionId, session] of activeSessions.entries()) {
+        if (now - session.lastActivityAt > TIMEOUT_MS) {
+            console.log(`[ScryptedRouter] Cleaning up inactive WebRTC session ${sessionId} for camera ${session.cameraId}`);
+            try {
+                session.control.endSession();
+            } catch (e) {
+                console.warn(`[ScryptedRouter] Error closing expired session ${sessionId}:`, e);
+            }
+            activeSessions.delete(sessionId);
+        }
+    }
+}, 15000);
 
 export function createScryptedRouter(coreService: CoreServiceFacade, scrypted: any): Router {
     const router = Router();
@@ -114,6 +131,20 @@ export function createScryptedRouter(coreService: CoreServiceFacade, scrypted: a
                 return;
             }
 
+            // Validar type y choices
+            if (currentSetting.choices && !currentSetting.choices.includes(value)) {
+                res.status(400).json({ error: `Value '${value}' is not a valid choice for setting '${key}'` });
+                return;
+            }
+            if (currentSetting.type === 'boolean' && typeof value !== 'boolean' && value !== 'true' && value !== 'false') {
+                res.status(400).json({ error: `Value '${value}' is not a valid boolean for setting '${key}'` });
+                return;
+            }
+            if ((currentSetting.type === 'integer' || currentSetting.type === 'number') && isNaN(Number(value))) {
+                res.status(400).json({ error: `Value '${value}' is not a valid number for setting '${key}'` });
+                return;
+            }
+
             console.log(`[ScryptedRouter] Modifying setting '${key}' on device ${deviceId}`);
             await proxy.putSetting(key, value);
             res.json({ success: true });
@@ -132,13 +163,14 @@ export function createScryptedRouter(coreService: CoreServiceFacade, scrypted: a
                 return;
             }
 
-            const proxy = pair.proxy;
-            if (typeof proxy.getCreateDeviceSettings !== 'function') {
+            // Verificar que realmente expone DeviceCreator
+            const dbDevice = scrypted.findPluginDeviceById(creatorDeviceId);
+            if (!dbDevice || !dbDevice.interfaces?.includes('DeviceCreator') || typeof pair.proxy.getCreateDeviceSettings !== 'function') {
                 res.status(400).json({ error: 'Device is not a DeviceCreator' });
                 return;
             }
 
-            const settings = await proxy.getCreateDeviceSettings();
+            const settings = await pair.proxy.getCreateDeviceSettings();
             res.json({ settings });
         } catch (err: unknown) {
             res.status(500).json({ error: 'Failed to get creator settings', detail: publicError(err) });
@@ -157,14 +189,14 @@ export function createScryptedRouter(coreService: CoreServiceFacade, scrypted: a
                 return;
             }
 
-            const proxy = pair.proxy;
-            if (typeof proxy.createDevice !== 'function') {
+            const dbDevice = scrypted.findPluginDeviceById(creatorDeviceId);
+            if (!dbDevice || !dbDevice.interfaces?.includes('DeviceCreator') || typeof pair.proxy.createDevice !== 'function') {
                 res.status(400).json({ error: 'Device is not a DeviceCreator' });
                 return;
             }
 
             console.log(`[ScryptedRouter] Creating device on creator ${creatorDeviceId}`);
-            const newDeviceId = await proxy.createDevice(settings);
+            const newDeviceId = await pair.proxy.createDevice(settings);
             res.json({ success: true, deviceId: newDeviceId });
         } catch (err: unknown) {
             res.status(500).json({ error: 'Failed to create device', detail: publicError(err) });
@@ -244,7 +276,13 @@ export function createScryptedRouter(coreService: CoreServiceFacade, scrypted: a
 
             const sessionId = crypto.randomUUID();
             if (control) {
-                activeSessions.set(sessionId, control);
+                const now = Date.now();
+                activeSessions.set(sessionId, {
+                    cameraId: deviceId,
+                    control,
+                    createdAt: now,
+                    lastActivityAt: now
+                });
             }
 
             res.json({ answer, sessionId });
@@ -257,15 +295,24 @@ export function createScryptedRouter(coreService: CoreServiceFacade, scrypted: a
     // DELETE /api/scrypted/devices/:id/webrtc/:sessionId
     router.delete('/devices/:id/webrtc/:sessionId', async (req: Request, res: Response) => {
         try {
-            const { sessionId } = req.params as any;
-            const control = activeSessions.get(sessionId);
-            if (control) {
-                console.log(`[ScryptedRouter] Ending upstream WebRTC session ${sessionId}`);
-                try {
-                    await control.endSession();
-                } catch (e) {
-                    console.warn('[ScryptedRouter] Error ending upstream RTCSessionControl:', e);
-                }
+            const { id, sessionId } = req.params as any;
+            const session = activeSessions.get(sessionId);
+            if (!session) {
+                res.status(404).json({ error: 'Session not found' });
+                return;
+            }
+
+            if (session.cameraId !== id) {
+                res.status(400).json({ error: 'Session camera ID mismatch' });
+                return;
+            }
+
+            console.log(`[ScryptedRouter] Explicitly ending WebRTC session ${sessionId} for camera ${id}`);
+            try {
+                await session.control.endSession();
+            } catch (e) {
+                console.warn('[ScryptedRouter] Error ending upstream RTCSessionControl:', e);
+            } finally {
                 activeSessions.delete(sessionId);
             }
             res.json({ success: true });

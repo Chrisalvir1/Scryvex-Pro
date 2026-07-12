@@ -27,10 +27,10 @@ export function WebRTCPlayer({ cameraId, onError, onClose }: WebRTCPlayerProps) 
     const cleanup = useCallback(async () => {
         const sid = sessionIdRef.current;
         if (sid) {
-            navigator.sendBeacon(apiUrl(`/api/scrypted/devices/${cameraId}/webrtc/${sid}`), '');
             fetch(apiUrl(`/api/scrypted/devices/${cameraId}/webrtc/${sid}`), {
                 method: 'DELETE',
                 credentials: 'same-origin',
+                keepalive: true,
             }).catch(() => {});
             sessionIdRef.current = '';
         }
@@ -49,6 +49,21 @@ export function WebRTCPlayer({ cameraId, onError, onClose }: WebRTCPlayerProps) 
 
     useEffect(() => {
         let cancelled = false;
+        frameNotifiedRef.current = false;
+
+        let frameTimeout: any = null;
+        const onFrame = () => {
+            if (frameNotifiedRef.current) return;
+            frameNotifiedRef.current = true;
+            if (frameTimeout) clearTimeout(frameTimeout);
+            setStatus('Reproduciendo');
+        };
+
+        const vid = videoRef.current;
+        if (vid) {
+            vid.addEventListener('loadeddata', onFrame, { once: true });
+            vid.addEventListener('playing', onFrame, { once: true });
+        }
 
         const start = async () => {
             setStatus('Negociando SDP');
@@ -99,24 +114,12 @@ export function WebRTCPlayer({ cameraId, onError, onClose }: WebRTCPlayerProps) 
                 await pc.setRemoteDescription({ type: 'answer', sdp: data.answer });
                 setStatus('Conectando ICE');
 
-                // Watchdog para el primer frame (30 segundos)
-                const frameTimeout = setTimeout(() => {
+                // Watchdog para el primer frame (15 segundos a partir de setRemoteDescription)
+                frameTimeout = setTimeout(() => {
                     if (!frameNotifiedRef.current && !cancelled) {
-                        handleError('Timeout: Conexión establecida pero no se recibió el primer frame.');
+                        handleError('Timeout: Conexión establecida pero no se recibió el primer frame tras 15 segundos.');
                     }
-                }, 30000);
-
-                if (videoRef.current) {
-                    const vid = videoRef.current;
-                    const onFrame = () => {
-                        if (frameNotifiedRef.current) return;
-                        frameNotifiedRef.current = true;
-                        clearTimeout(frameTimeout);
-                        setStatus('Reproduciendo');
-                    };
-                    vid.addEventListener('loadeddata', onFrame, { once: true });
-                    vid.addEventListener('playing', onFrame, { once: true });
-                }
+                }, 15000);
 
             } catch (err: any) {
                 if (!cancelled) handleError(err.message ?? 'Error inesperado al iniciar WebRTC.');
@@ -127,6 +130,11 @@ export function WebRTCPlayer({ cameraId, onError, onClose }: WebRTCPlayerProps) 
 
         return () => {
             cancelled = true;
+            if (frameTimeout) clearTimeout(frameTimeout);
+            if (vid) {
+                vid.removeEventListener('loadeddata', onFrame);
+                vid.removeEventListener('playing', onFrame);
+            }
             cleanup();
         };
     }, [cameraId, cleanup, handleError]);

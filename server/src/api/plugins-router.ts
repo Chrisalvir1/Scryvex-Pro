@@ -4,6 +4,15 @@ import { Pool } from 'pg';
 export function createPluginsRouter(pool: Pool, scrypted: any): Router {
     const router = Router();
 
+    // Proteger API de plugins con autenticación explícita
+    router.use((_req, res, next) => {
+        if (!res.locals.username) {
+            res.status(401).json({ error: 'NOT_AUTHENTICATED' });
+            return;
+        }
+        next();
+    });
+
     const npmPackageMap: Record<string, string> = {
         rtsp: '@scrypted/rtsp',
         onvif: '@scrypted/onvif',
