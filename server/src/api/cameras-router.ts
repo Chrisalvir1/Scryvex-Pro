@@ -457,8 +457,14 @@ export function createCamerasRouter(
                 codec: result.codec,
                 iceState: 'new'
             });
-        } catch (error) {
-            res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+        } catch (error: any) {
+            if (error?.code === 'CAMERA_SOURCE_UNAVAILABLE') {
+                res.status(409).json({ code: error.code, message: error.message });
+            } else if (error?.code === 406 || error?.message?.includes('406')) {
+                res.status(406).json({ error: error.message || 'Not Acceptable' });
+            } else {
+                res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+            }
         }
     });
 
@@ -472,6 +478,18 @@ export function createCamerasRouter(
             res.json({ success: true });
         } catch (error) {
             // El endpoint de candidatos debe rechazar candidatos pertenecientes a otra sesión.
+            res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+        }
+    });
+
+    router.post('/:id/live/webrtc/:sessionId/first-frame', async (req, res) => {
+        try {
+            if (!webrtcSessionManager) {
+                res.status(501).json({ error: 'WebRTC not enabled' }); return;
+            }
+            await webrtcSessionManager.confirmFirstFrame(req.params.sessionId);
+            res.json({ success: true });
+        } catch (error) {
             res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
         }
     });

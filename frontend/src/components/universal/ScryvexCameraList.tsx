@@ -167,10 +167,16 @@ export function ScryvexCameraList({ cameras, loading, error, onRefresh, onAddCam
                                         </button>
                                         <button 
                                             onClick={() => { setLiveMode(true); setLiveError(false); setPreviewKey(k => k + 1); }}
-                                            disabled={!selectedCamera.capabilities?.preview?.mjpeg}
                                             className={`text-xs font-bold px-2 py-1 rounded transition-colors ${liveMode ? 'bg-red-500/20 text-red-400' : 'text-gray-400 hover:text-white disabled:opacity-30'}`}
                                         >
-                                            Live
+                                            WebRTC Live
+                                        </button>
+                                        <button 
+                                            onClick={() => { window.open(apiUrl(`/api/cameras/${selectedCamera.id}/preview.mjpeg`), '_blank'); }}
+                                            disabled={!selectedCamera.capabilities?.preview?.mjpeg}
+                                            className="text-xs font-bold px-2 py-1 rounded transition-colors text-gray-400 hover:text-white disabled:opacity-30"
+                                        >
+                                            Diagnóstico MJPEG
                                         </button>
                                     </div>
                                     {liveError && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded uppercase font-bold">Fallback</span>}
@@ -180,29 +186,24 @@ export function ScryvexCameraList({ cameras, loading, error, onRefresh, onAddCam
                                         liveMode && !liveError ? (
                                             <WebRTCPlayer 
                                                 cameraId={selectedCamera.id} 
-                                                onError={() => {
+                                                onError={(err) => {
                                                     setLiveError(true);
                                                     setLiveMode(false);
                                                     setPreviewKey(k => k + 1);
+                                                    alert(err.message);
                                                 }}
                                             />
                                         ) : (
                                             <img 
                                                 key={previewKey}
-                                                src={apiUrl(`/api/cameras/${selectedCamera.id}/${liveMode && !liveError ? 'preview.mjpeg' : 'preview/frame.jpg'}?t=${previewKey}`)} 
+                                                src={apiUrl(`/api/cameras/${selectedCamera.id}/preview/frame.jpg?t=${previewKey}`)} 
                                                 alt="Camera Preview" 
                                                 className="w-full h-full object-contain"
                                                 onError={(e) => {
                                                     const target = e.target as HTMLImageElement;
                                                     target.onerror = null;
-                                                    if (liveMode) {
-                                                        setLiveError(true);
-                                                        setLiveMode(false);
-                                                        setPreviewKey(k => k + 1);
-                                                    } else {
-                                                        target.src = '';
-                                                        target.parentElement!.innerHTML = '<div class="text-xs text-red-400 p-4 text-center">Error al cargar preview</div>';
-                                                    }
+                                                    target.src = '';
+                                                    target.parentElement!.innerHTML = '<div class="text-xs text-red-400 p-4 text-center">Error al cargar preview</div>';
                                                 }}
                                             />
                                         )

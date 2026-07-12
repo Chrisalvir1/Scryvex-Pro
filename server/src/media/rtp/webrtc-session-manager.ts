@@ -1,10 +1,12 @@
-import { RTCPeerConnection, RTCRtpCodecParameters, MediaStreamTrack, RTCSessionDescription, RtcpPacket } from 'werift';
+import { RTCPeerConnection, RTCRtpCodecParameters, MediaStreamTrack, RTCSessionDescription, RtpPacket } from 'werift';
 import dgram from 'dgram';
 import { randomUUID } from 'crypto';
 import { CameraService } from '../../api/camera-service';
 import { CameraProbe } from '../../api/camera-probe';
 import { PreviewService } from '../preview-service';
 import { MediaSourceSessionManager } from '../media-session-manager';
+
+export type WebRTCState = 'idle' | 'validating_source' | 'offer_received' | 'answer_created' | 'ice_checking' | 'ice_connected' | 'rtp_receiving' | 'first_frame' | 'failed' | 'closed';
 
 export class WebRTCSessionManager {
     private sessions = new Map<string, {
@@ -13,7 +15,10 @@ export class WebRTCSessionManager {
         rtpSocket: dgram.Socket;
         rtcpSocket: dgram.Socket;
         ffProcess?: any;
-        timeout: NodeJS.Timeout;
+        state: WebRTCState;
+        watchdog: NodeJS.Timeout;
+        cameraId: string;
+        startTime: number;
     }>();
 
     constructor(
@@ -22,14 +27,53 @@ export class WebRTCSessionManager {
         private readonly sessionManager: MediaSourceSessionManager
     ) {}
 
+    private log(sessionId: string, event: string, details?: any) {
+        const session = this.sessions.get(sessionId);
+        const duration = session ? Date.now() - session.startTime : 0;
+        console.log(`[WebRTC] [${sessionId}] [${event}] [${duration}ms]`, details ? JSON.stringify(details) : '');
+    }
+
+    private transition(sessionId: string, newState: WebRTCState, details?: any) {
+        const session = this.sessions.get(sessionId);
+        if (session && session.state !== 'closed' && session.state !== 'failed') {
+            session.state = newState;
+            this.log(sessionId, `state_changed`, { state: newState, ...details });
+        }
+    }
+
+    private setWatchdog(sessionId: string, ms: number, failureReason: string) {
+        const session = this.sessions.get(sessionId);
+        if (session) {
+            clearTimeout(session.watchdog);
+            session.watchdog = setTimeout(() => {
+                this.failSession(sessionId, failureReason);
+            }, ms);
+        }
+    }
+
     async createOffer(
         cameraId: string, 
         offer: { sdp: string, type: 'offer' | 'pranswer' | 'answer' | 'rollback' }, 
         cameraProbe: CameraProbe
     ) {
         const sessionId = randomUUID();
+        const startTime = Date.now();
         
-        // Ensure authentication / timeout / basic WebRTC logic
+        this.log(sessionId, 'webrtc.offer.received', { cameraId });
+
+        // 1. Validating source (synchronous check before accepting WebRTC)
+        let source;
+        try {
+            source = await this.previewService.resolveProfile(cameraId, cameraProbe);
+        } catch (err: any) {
+            this.log(sessionId, 'webrtc.failed', { reason: 'CAMERA_SOURCE_UNAVAILABLE', details: err.message });
+            const error: any = new Error(err.message);
+            error.code = 'CAMERA_SOURCE_UNAVAILABLE';
+            throw error;
+        }
+
+        this.log(sessionId, 'webrtc.source.validated', { profileId: source.descriptor.id });
+
         const pc = new RTCPeerConnection();
         const track = new MediaStreamTrack({ kind: 'video', codec: new RTCRtpCodecParameters({
             mimeType: 'video/H264',
@@ -46,47 +90,72 @@ export class WebRTCSessionManager {
         rtpSocket.bind(0);
         rtcpSocket.bind(0);
 
-        // Bind UDP sockets
         await new Promise<void>((resolve) => rtpSocket.once('listening', resolve));
         await new Promise<void>((resolve) => rtcpSocket.once('listening', resolve));
 
-        const rtpPort = rtpSocket.address().port;
-        const rtcpPort = rtcpSocket.address().port;
+        this.sessions.set(sessionId, {
+            pc, track, rtpSocket, rtcpSocket,
+            state: 'offer_received',
+            watchdog: setTimeout(() => {}, 0),
+            cameraId,
+            startTime
+        });
 
-        // Clean up timeout (15s if no connection)
-        let timeout = setTimeout(() => {
-            this.stopSession(sessionId);
-        }, 15000);
+        // ICE Watchdog: 15 seconds
+        this.setWatchdog(sessionId, 15000, 'ICE connection timeout');
 
         pc.connectionStateChange.subscribe((state) => {
-            if (state === 'connected') {
-                clearTimeout(timeout);
-                // Connected, start ffmpeg
-                this.startFFmpeg(cameraId, rtpPort, rtcpPort, sessionId, cameraProbe).catch(console.error);
+            if (state === 'connecting') {
+                this.transition(sessionId, 'ice_checking');
+                this.log(sessionId, 'webrtc.ice.checking');
+            } else if (state === 'connected') {
+                this.transition(sessionId, 'ice_connected');
+                this.log(sessionId, 'webrtc.ice.connected');
+                
+                // Switch to RTP watchdog: 10 seconds
+                this.setWatchdog(sessionId, 10000, 'RTP receive timeout');
+                
+                const rtpPort = rtpSocket.address().port;
+                const rtcpPort = rtcpSocket.address().port;
+                this.startFFmpeg(cameraId, rtpPort, rtcpPort, sessionId, source.descriptor.id).catch(err => {
+                    this.failSession(sessionId, 'FFmpeg start failed: ' + err.message);
+                });
             } else if (state === 'failed' || state === 'closed' || state === 'disconnected') {
-                this.stopSession(sessionId);
+                this.failSession(sessionId, `ICE state: ${state}`);
             }
         });
 
-        // Handle RTP forwarding
+        let firstPacketReceived = false;
+
         rtpSocket.on('message', (msg) => {
-            // Werift MediaStreamTrack accepts raw RTP buffers if payload type matches
-            // We ensure ffmpeg outputs payload type 96
-            if (pc.connectionState === 'connected' && msg.length >= 2) {
-                // Ensure payload type is 96 in the RTP header
-                msg.writeUInt8((msg.readUInt8(1) & 0x80) | 96, 1);
-                track.writeRtp(msg);
+            if (pc.connectionState === 'connected' && msg.length >= 12) {
+                try {
+                    const packet = RtpPacket.deSerialize(msg);
+                    // Force payload type to match Werift Track
+                    packet.header.payloadType = 96;
+                    
+                    if (!firstPacketReceived) {
+                        firstPacketReceived = true;
+                        this.transition(sessionId, 'rtp_receiving');
+                        this.log(sessionId, 'webrtc.rtp.first_packet');
+                        
+                        // Switch to First Frame watchdog: 10 seconds
+                        this.setWatchdog(sessionId, 10000, 'First frame timeout');
+                    }
+
+                    track.writeRtp(packet.serialize());
+                } catch (e) {
+                    // Ignore bad packet
+                }
             }
         });
 
-        // Set remote and create answer
         await pc.setRemoteDescription(offer);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        this.sessions.set(sessionId, {
-            pc, track, rtpSocket, rtcpSocket, timeout
-        });
+        this.transition(sessionId, 'answer_created');
+        this.log(sessionId, 'webrtc.answer.created');
 
         return {
             sessionId,
@@ -102,13 +171,18 @@ export class WebRTCSessionManager {
         await session.pc.addIceCandidate(candidate);
     }
 
-    private async startFFmpeg(cameraId: string, rtpPort: number, rtcpPort: number, sessionId: string, cameraProbe: CameraProbe) {
+    async confirmFirstFrame(sessionId: string) {
+        const session = this.sessions.get(sessionId);
+        if (session) {
+            clearTimeout(session.watchdog);
+            this.transition(sessionId, 'first_frame');
+            this.log(sessionId, 'webrtc.first_frame.browser');
+        }
+    }
+
+    private async startFFmpeg(cameraId: string, rtpPort: number, rtcpPort: number, sessionId: string, sourceId: string) {
         const session = this.sessions.get(sessionId);
         if (!session) return;
-
-        // FFmpeg command to stream RTP to rtpSocket
-        const source = await this.previewService.resolveProfile(cameraId, cameraProbe);
-        const { id: sourceId } = source.descriptor;
 
         await this.sessionManager.executeWithSourceRetry(cameraId, sourceId, async (input, sig) => {
             const args = [
@@ -135,11 +209,24 @@ export class WebRTCSessionManager {
         });
     }
 
+    private failSession(sessionId: string, reason: string) {
+        const session = this.sessions.get(sessionId);
+        if (session && session.state !== 'failed' && session.state !== 'closed') {
+            session.state = 'failed';
+            this.log(sessionId, 'webrtc.failed', { reason });
+            this.stopSession(sessionId);
+        }
+    }
+
     stopSession(sessionId: string) {
         const session = this.sessions.get(sessionId);
         if (session) {
-            clearTimeout(session.timeout);
-            session.pc.close();
+            clearTimeout(session.watchdog);
+            if (session.state !== 'failed') {
+                session.state = 'closed';
+                this.log(sessionId, 'webrtc.closed');
+            }
+            try { session.pc.close(); } catch (e) {}
             try { session.rtpSocket.close(); } catch (e) {}
             try { session.rtcpSocket.close(); } catch (e) {}
             if (session.ffProcess && !session.ffProcess.killed) {
