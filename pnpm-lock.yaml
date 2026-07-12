@@ -1114,6 +1114,9 @@ importers:
       axios:
         specifier: ^1.7.0
         version: 1.18.1
+      bcrypt:
+        specifier: ^6.0.0
+        version: 6.0.0
       body-parser:
         specifier: ^2.2.0
         version: 2.3.0
@@ -1202,6 +1205,9 @@ importers:
       '@types/adm-zip':
         specifier: ^0.5.7
         version: 0.5.8
+      '@types/bcrypt':
+        specifier: ^6.0.0
+        version: 6.0.0
       '@types/body-parser':
         specifier: ^1.19.5
         version: 1.19.6
@@ -2893,6 +2899,9 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/bcrypt@6.0.0':
+    resolution: {integrity: sha512-/oJGukuH3D2+D+3H4JWLaAsJ/ji86dhRidzZ/Od7H/i8g+aCmvkeCc6Ni/f9uxGLSQVCRZkX2/lqEFG2BvWtlQ==}
+
   '@types/body-parser@1.19.6':
     resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
 
@@ -3733,6 +3742,10 @@ packages:
     resolution: {integrity: sha512-c/jurFrDLyui7o1J86yLkRu4LMsTYcBohveus7/I2Hzdn9KIP2bdJPTue/lR1KH46enoPbD77GKeSYNdyPoD3Q==}
     engines: {node: '>=6.0.0'}
     hasBin: true
+
+  bcrypt@6.0.0:
+    resolution: {integrity: sha512-cU8v/EGSrnH+HnxV2z0J7/blxH8gq7Xh2JFT6Aroax7UohdmiJJlxApMxtKfuI7z68NvvVcmR78k2LbT6efhRg==}
+    engines: {node: '>= 18'}
 
   bcryptjs@3.0.3:
     resolution: {integrity: sha512-GlF5wPWnSa/X5LKM1o0wz0suXIINz1iHRLvTS+sLyi7XPbe5ycmYI3DlZqVGZZtDgl4DmasFg7gOB3JYbphV5g==}
@@ -5939,6 +5952,10 @@ packages:
 
   node-addon-api@7.1.1:
     resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
+
+  node-addon-api@8.9.0:
+    resolution: {integrity: sha512-ekZMeaaIzSQTSpr7X2X3iJM7lTzgnx8ahAG9pJfT/7+14mlEM8ZYQ9cgCDvSSRbReFK0oHli3WrZdCiRsgAT9Q==}
+    engines: {node: ^18 || ^20 || >= 21}
 
   node-ansi-logger@3.3.0:
     resolution: {integrity: sha512-ZW77lbZkA8h3r2HA2rcE5RjTIcwRDNB072RkZVyimGQpmEorJT8ajZ7UDhkHGoh0JRrCJL0iUKBE8q4oU8MHMg==}
@@ -8965,6 +8982,7 @@ snapshots:
       '@scryvex/contracts': link:packages/contracts
       adm-zip: 0.5.18
       axios: 1.18.1
+      bcrypt: 6.0.0
       body-parser: 2.3.0
       cookie-parser: 1.4.7
       dotenv: 16.6.1
@@ -9291,6 +9309,10 @@ snapshots:
   '@types/babel__traverse@7.28.0':
     dependencies:
       '@babel/types': 7.29.7
+
+  '@types/bcrypt@6.0.0':
+    dependencies:
+      '@types/node': 22.20.0
 
   '@types/body-parser@1.19.6':
     dependencies:
@@ -10193,6 +10215,11 @@ snapshots:
   base64id@2.0.0: {}
 
   baseline-browser-mapping@2.10.42: {}
+
+  bcrypt@6.0.0:
+    dependencies:
+      node-addon-api: 8.9.0
+      node-gyp-build: 4.8.4
 
   bcryptjs@3.0.3: {}
 
@@ -12765,6 +12792,8 @@ snapshots:
     optional: true
 
   node-addon-api@7.1.1: {}
+
+  node-addon-api@8.9.0: {}
 
   node-ansi-logger@3.3.0: {}
 
