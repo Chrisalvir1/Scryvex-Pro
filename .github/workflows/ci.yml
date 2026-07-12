@@ -131,7 +131,11 @@ jobs:
             SOURCE_REF=${{ github.sha }}
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.addon.outputs.version }}
+            ${{ env.IMAGE_NAME }}-aarch64:${{ steps.addon.outputs.version }}
+            ${{ env.IMAGE_NAME }}-amd64:${{ steps.addon.outputs.version }}
             ${{ env.IMAGE_NAME }}:alpha
+            ${{ env.IMAGE_NAME }}-aarch64:alpha
+            ${{ env.IMAGE_NAME }}-amd64:alpha
             ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
