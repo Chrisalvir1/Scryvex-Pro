@@ -118,7 +118,7 @@ export function transcodingDebugModeWarning() {
     console.warn('=================================================================================');
 }
 
-export function checkCompatibleCodec(console: Console, device: ScryptedDevice, videoCodec: String) {
+export function checkCompatibleCodec(console: Console, device: ScryptedDevice, videoCodec: String, expectedCodec = 'h264') {
     if (!videoCodec) {
         console.warn('=============================================================================');
         console.warn('No video codec reported. This stream may fail. Enable the Rebroadcast Plugin.');
@@ -126,16 +126,19 @@ export function checkCompatibleCodec(console: Console, device: ScryptedDevice, v
         console.warn('=============================================================================');
         return;
     }
-    const isDefinitelyNotH264 = videoCodec && videoCodec.toLowerCase().indexOf('h264') === -1;
-    if (isDefinitelyNotH264) {
+    const normalized = videoCodec?.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const matches = expectedCodec === 'h265'
+        ? normalized === 'h265' || normalized === 'hevc'
+        : normalized === 'h264' || normalized === 'avc';
+    if (!matches) {
         const str =
             console.error('=============================================================================');
-        console.error(`${device.name} video codec must be h264 but is ${videoCodec}.`);
+        console.error(`${device.name} video codec must be ${expectedCodec} but is ${videoCodec}.`);
         console.error('This stream may fail. Read the instructions in the HomeKit Plugin');
         console.error('to properly configure your camera codec.');
         console.error('Stream compatibility can be diagnosed by enabling Transcoding Debug Mode.');
         console.error('=============================================================================');
 
-        log.a(`${device.name} video codec must be h264 but is ${videoCodec}. This stream may fail. Read the instructions in the HomeKit Plugin to properly configure your camera codec.`);
+        log.a(`${device.name} video codec must be ${expectedCodec} but is ${videoCodec}. This stream may fail. Read the instructions in the HomeKit Plugin to properly configure your camera codec.`);
     }
 }

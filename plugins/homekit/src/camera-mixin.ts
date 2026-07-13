@@ -119,6 +119,15 @@ ${this.storageSettings.values.qrCode}
                 choices: ['native-opus', 'encode-aac-to-opus'],
                 value: audioMode,
             });
+            settings.push({
+                title: 'Apple HKSV 2026 Multi-Tier RTP Preview',
+                subgroup: 'Scryvex Pro',
+                key: 'hksv2026MultiTierRtp',
+                description: 'Expose Apple Developer Preview Camera Capabilities and Multi-Tier RTP services. Requires a compatible Apple developer controller; standard HomeKit streaming remains available separately.',
+                type: 'boolean',
+                value: this.storage.getItem('hksv2026MultiTierRtp') === 'true',
+                disabled: !h265.eligible,
+            });
         }
         catch (error) {
             settings.push({

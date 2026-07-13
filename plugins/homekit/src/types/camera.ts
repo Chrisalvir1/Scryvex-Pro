@@ -6,6 +6,7 @@ import type { HomeKitPlugin } from '../main';
 import { handleFragmentsRequests, iframeIntervalSeconds } from './camera/camera-recording';
 import { createCameraStreamingDelegate } from './camera/camera-streaming';
 import { FORCE_OPUS } from './camera/camera-utils';
+import { Hksv2026MultiTierRtpController } from './camera/hksv-2026-controller';
 import { makeAccessory, mergeOnOffDevicesByType } from './common';
 
 const { deviceManager, systemManager } = sdk;
@@ -211,6 +212,17 @@ addSupportedType({
         });
 
         accessory.configureController(controller);
+
+        if (storage.getItem('hksv2026MultiTierRtp') === 'true') {
+            try {
+                const streams = await device.getVideoStreamOptions();
+                Hksv2026MultiTierRtpController.attach(accessory, delegate, streams);
+                console.log('Apple HKSV 2026 Multi-Tier RTP services enabled.');
+            }
+            catch (error) {
+                console.error('Unable to enable Apple HKSV 2026 Multi-Tier RTP services.', error);
+            }
+        }
 
         if (controller.motionService) {
             const motionDevice = device;

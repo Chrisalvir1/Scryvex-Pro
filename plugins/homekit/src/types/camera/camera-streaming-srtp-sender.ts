@@ -49,6 +49,9 @@ export function createCameraStreamSender(console: Console, config: Config, sende
     let audioIntervalScale = 1;
     if (audioOptions) {
         switch (audioOptions.audioSampleRate) {
+            case 48 as AudioStreamingSamplerate:
+                audioIntervalScale = 6;
+                break;
             case AudioStreamingSamplerate.KHZ_24:
                 audioIntervalScale = 3;
                 break;

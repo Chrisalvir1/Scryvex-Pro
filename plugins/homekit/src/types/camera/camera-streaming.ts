@@ -280,6 +280,7 @@ export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCame
             }
 
             const debugMode = getDebugMode(storage);
+            const requestedVideoCodec = (request.video as any).codec || 'h264';
             const mediaOptions: RequestMediaStreamOptions = {
                 destination,
                 destinationId: session.prepareRequest.targetAddress,
@@ -288,7 +289,7 @@ export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCame
                 // below checks the stream actually returned by the runtime.
                 adaptive: !strictNativeRemux,
                 video: {
-                    codec: 'h264',
+                    codec: requestedVideoCodec,
                     bitrate: request.video.max_bit_rate * 1000,
                     // if these are sent as width/height rather than clientWidth/clientHeight,
                     // rebroadcast will always choose substream to treat it as a hard constraint.

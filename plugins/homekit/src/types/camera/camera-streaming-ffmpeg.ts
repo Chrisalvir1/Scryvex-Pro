@@ -37,6 +37,7 @@ export async function startCameraStreamFfmpeg(device: ScryptedDevice & VideoCame
         transcodingDebugModeWarning();
 
     const videoCodec = ffmpegInput.mediaStreamOptions?.video?.codec;
+    const requestedVideoCodec = ((request.video as any).codec || 'h264').toLowerCase();
     const needsFFmpeg = debugMode.video
         || ffmpegInput.container !== 'rtsp';
 
@@ -61,7 +62,7 @@ export async function startCameraStreamFfmpeg(device: ScryptedDevice & VideoCame
         );
     }
     else {
-        checkCompatibleCodec(console, device, videoCodec)
+        checkCompatibleCodec(console, device, videoCodec, requestedVideoCodec)
 
         videoArgs.push(
             "-vcodec", "copy",
@@ -246,11 +247,11 @@ export async function startCameraStreamFfmpeg(device: ScryptedDevice & VideoCame
         return;
     }
 
-    const videoOptions = {
+    const videoOptions = requestedVideoCodec === 'h264' ? {
         maxPacketSize: videomtu,
         sps: undefined,
         pps: undefined,
-    };
+    } : undefined;
 
     const videoSender = createCameraStreamSender(console, session.vconfig, session.videoReturn,
         session.videossrc, session.startRequest.video.pt,
@@ -261,7 +262,7 @@ export async function startCameraStreamFfmpeg(device: ScryptedDevice & VideoCame
 
     const rtpTracks: RtpTracks = {
         video: {
-            codecCopy: videoIsSrtpSenderCompatible ? 'h264' : 'transcode',
+            codecCopy: videoIsSrtpSenderCompatible ? requestedVideoCodec : 'transcode',
             encoderArguments: videoArgs,
             ffmpegDestination: `${videoAddress}:${videoRtpPort}`,
             packetSize: videomtu,
@@ -273,11 +274,11 @@ export async function startCameraStreamFfmpeg(device: ScryptedDevice & VideoCame
                     "AES_CM_128_HMAC_SHA1_80" : "AES_CM_256_HMAC_SHA1_80",
                 key: videoKey,
             },
-            onMSection: (videoSection) => {
+            onMSection: requestedVideoCodec === 'h264' ? (videoSection) => {
                 const spsPps = getSpsPps(videoSection);
-                videoOptions.sps = spsPps?.sps;
-                videoOptions.pps = spsPps?.pps;
-            },
+                videoOptions!.sps = spsPps?.sps;
+                videoOptions!.pps = spsPps?.pps;
+            } : undefined,
             firstPacket() {
                 videoSender.sendRtcp();
             },
