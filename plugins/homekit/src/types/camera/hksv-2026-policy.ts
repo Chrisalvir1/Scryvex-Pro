@@ -24,6 +24,8 @@ export interface Hksv2026NativeRemuxPlan {
     reason: string;
 }
 
+export type Hksv2026AudioMode = 'native-opus' | 'encode-aac-to-opus';
+
 function normalizeCodec(codec?: string) {
     return codec?.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -34,13 +36,30 @@ function normalizeCodec(codec?: string) {
  * must not be presented as proof of the 16/24 kHz capture requirement in the
  * Apple developer preview.
  */
-export function selectHksv2026OpusAudio(streams: ResponseMediaStreamOptions[]): Hksv2026AudioPlan {
+export function selectHksv2026OpusAudio(
+    streams: ResponseMediaStreamOptions[],
+    audioMode: Hksv2026AudioMode = 'native-opus',
+): Hksv2026AudioPlan {
     const candidates = streams
         .filter(stream => normalizeCodec(stream.audio?.codec) === 'opus')
         .sort((a, b) => (b.audio?.sampleRate || 0) - (a.audio?.sampleRate || 0));
     const selected = candidates[0];
+    if (!selected && audioMode === 'encode-aac-to-opus') {
+        const aac = streams.find(stream => {
+            const codec = normalizeCodec(stream.audio?.codec);
+            return codec === 'aac' || codec === 'aaclc' || codec === 'aaceld';
+        });
+        if (aac) {
+            return {
+                eligible: true,
+                codec: 'opus',
+                sampleRate: 48000,
+                reason: `AAC nativo detectado. Solo el audio se codificará a Opus 48 kHz; el vídeo seguirá en remux sin conversión.`,
+            };
+        }
+    }
     if (!selected)
-        return { eligible: false, reason: 'La cámara no anunció audio Opus nativo; no se convertirá AAC, PCM ni G.711.' };
+        return { eligible: false, reason: 'La cámara no anunció audio Opus nativo. Active la conversión AAC→Opus únicamente si la cámara entrega AAC.' };
 
     const sampleRate = selected.audio?.sampleRate;
     if (![16000, 24000, 48000].includes(sampleRate || 0))
@@ -95,17 +114,22 @@ export function selectHksv2026RemuxProfile(
 }
 
 /** Selects the strict profile used by the standard HAP controller: H.264 + Opus only. */
-export function selectHksv2026NativeRemuxPlan(streams: ResponseMediaStreamOptions[]): Hksv2026NativeRemuxPlan {
+export function selectHksv2026NativeRemuxPlan(
+    streams: ResponseMediaStreamOptions[],
+    audioMode: Hksv2026AudioMode = 'native-opus',
+): Hksv2026NativeRemuxPlan {
     // Audio and video must be available from one source. Combining independent
     // stream entries could otherwise make a camera appear remux-capable when no
     // single RTSP source actually carries both tracks.
     const combined = streams.filter(stream => {
         const videoCodec = normalizeCodec(stream.video?.codec);
+        const audioCodec = normalizeCodec(stream.audio?.codec);
         return (videoCodec === 'h264' || videoCodec === 'avc')
-            && normalizeCodec(stream.audio?.codec) === 'opus';
+            && (audioCodec === 'opus'
+                || (audioMode === 'encode-aac-to-opus' && (audioCodec === 'aac' || audioCodec === 'aaclc' || audioCodec === 'aaceld')));
     });
     const video = selectHksv2026RemuxProfile(combined, 'h264');
-    const audio = selectHksv2026OpusAudio(combined);
+    const audio = selectHksv2026OpusAudio(combined, audioMode);
     return {
         eligible: video.eligible && audio.eligible,
         video,
@@ -124,13 +148,14 @@ export function selectHksv2026NativeRemuxPlan(streams: ResponseMediaStreamOption
 export function assertHksv2026StrictRemuxStream(stream: MediaStreamOptions, requested: {
     width: number;
     height: number;
-}): void {
+}, audioMode: Hksv2026AudioMode = 'native-opus'): void {
     const videoCodec = normalizeCodec(stream.video?.codec);
     const audioCodec = normalizeCodec(stream.audio?.codec);
     if (videoCodec !== 'h264' && videoCodec !== 'avc')
         throw new Error(`Native Remux requires camera-native H.264; runtime delivered ${stream.video?.codec || 'an unknown codec'}.`);
-    if (audioCodec !== 'opus')
-        throw new Error(`Native Remux requires camera-native Opus; runtime delivered ${stream.audio?.codec || 'no audio'}.`);
+    const isAac = audioCodec === 'aac' || audioCodec === 'aaclc' || audioCodec === 'aaceld';
+    if (audioCodec !== 'opus' && !(audioMode === 'encode-aac-to-opus' && isAac))
+        throw new Error(`Native Remux requires camera-native Opus${audioMode === 'encode-aac-to-opus' ? ' or AAC for audio-only Opus encoding' : ''}; runtime delivered ${stream.audio?.codec || 'no audio'}.`);
     if (stream.container !== 'rtsp')
         throw new Error(`Native Remux requires an RTSP packet source; runtime delivered ${stream.container || 'an unknown container'}.`);
     if (stream.video?.width !== requested.width || stream.video?.height !== requested.height)

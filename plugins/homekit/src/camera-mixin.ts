@@ -3,7 +3,7 @@ import sdk, { ObjectDetector, Readme, ScryptedDeviceType, ScryptedInterface, Set
 import { StorageSettings, StorageSettingsDevice } from "@scrypted/sdk/storage-settings";
 import { HomekitMixin } from "./homekit-mixin";
 import { getDebugMode } from "./types/camera/camera-debug-mode-storage";
-import { selectHksv2026NativeRemuxPlan, selectHksv2026RemuxProfile } from './types/camera/hksv-2026-policy';
+import { Hksv2026AudioMode, selectHksv2026NativeRemuxPlan, selectHksv2026RemuxProfile } from './types/camera/hksv-2026-policy';
 
 const { systemManager, deviceManager, log } = sdk;
 
@@ -92,7 +92,8 @@ ${this.storageSettings.values.qrCode}
             const streams = await this.mixinDevice.getVideoStreamOptions();
             const h264 = selectHksv2026RemuxProfile(streams, 'h264');
             const h265 = selectHksv2026RemuxProfile(streams, 'h265');
-            const nativeRemux = selectHksv2026NativeRemuxPlan(streams);
+            const audioMode = (this.storage.getItem('hksv2026AudioMode') || 'native-opus') as Hksv2026AudioMode;
+            const nativeRemux = selectHksv2026NativeRemuxPlan(streams, audioMode);
             settings.push({
                 title: 'HKSV 2026 Remux Readiness',
                 subgroup: 'Scryvex Pro',
@@ -109,6 +110,14 @@ ${this.storageSettings.values.qrCode}
                 type: 'boolean',
                 value: this.storage.getItem('hksv2026NativeRemux') === 'true',
                 disabled: !nativeRemux.eligible,
+            });
+            settings.push({
+                title: 'HKSV Opus Audio Mode',
+                subgroup: 'Scryvex Pro',
+                key: 'hksv2026AudioMode',
+                description: 'Native Opus never encodes audio. AAC to Opus preserves the native video track and only encodes AAC audio to Opus 48 kHz.',
+                choices: ['native-opus', 'encode-aac-to-opus'],
+                value: audioMode,
             });
         }
         catch (error) {

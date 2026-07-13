@@ -21,7 +21,7 @@ import { createReturnAudioSdp } from './camera-return-audio';
 import { startCameraStreamFfmpeg } from './camera-streaming-ffmpeg';
 import { CameraStreamingSession } from './camera-streaming-session';
 import { getStreamingConfiguration } from './camera-utils';
-import { assertHksv2026StrictRemuxStream } from './hksv-2026-policy';
+import { assertHksv2026StrictRemuxStream, Hksv2026AudioMode } from './hksv-2026-policy';
 
 const { mediaManager } = sdk;
 
@@ -35,7 +35,8 @@ export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCame
     console: Console,
     storage: Storage,
     homekitPlugin: HomeKitPlugin,
-    strictNativeRemux = false) {
+    strictNativeRemux = false,
+    hksv2026AudioMode: Hksv2026AudioMode = 'native-opus') {
     const sessions = new Map<string, CameraStreamingSession>();
     const twoWayAudio = device.interfaces?.includes(ScryptedInterface.Intercom);
 
@@ -304,7 +305,9 @@ export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCame
                     // opus is the preferred/default codec, and can be repacketized to fit any request if in use.
                     // otherwise audio streaming for aac-eld needs to be transcoded, since nothing outputs aac-eld natively.
                     // pcm/g711 the second best option for aac-eld, since it's raw audio.
-                    codec: request.audio.codec === AudioStreamingCodecType.OPUS ? 'opus' : 'pcm',
+                    codec: request.audio.codec === AudioStreamingCodecType.OPUS
+                        ? (hksv2026AudioMode === 'encode-aac-to-opus' ? 'aac' : 'opus')
+                        : 'pcm',
                 },
                 tool: debugMode.video ? 'ffmpeg' : 'scrypted',
             };
@@ -312,7 +315,7 @@ export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCame
             const mediaObject = await device.getVideoStream(mediaOptions);
             const videoInput = await mediaManager.convertMediaObjectToJSON<FFmpegInput>(mediaObject, ScryptedMimeTypes.FFmpegInput);
             if (strictNativeRemux)
-                assertHksv2026StrictRemuxStream(videoInput.mediaStreamOptions || {}, request.video);
+                assertHksv2026StrictRemuxStream(videoInput.mediaStreamOptions || {}, request.video, hksv2026AudioMode);
             let mediaStreamFeedback: MediaStreamFeedback;
             try {
                 // homekit mtu is unusable. webrtc uses 1200 due to weird cell networks, vpns, etc.
