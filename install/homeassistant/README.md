@@ -9,6 +9,7 @@ official Scrypted Runtime and preserves Scrypted's supported plugin flow:
   installed plugins, or settings with another Scrypted add-on.
 - No Legacy camera provider is included in this image.
 
-The image tag must match `install/config.yaml`'s add-on version. GitHub Actions
+The image tag must match `install/config.yaml`'s add-on version. It installs
+the current supported official Scrypted server package from npm. GitHub Actions
 publishes multi-architecture `linux/amd64` and `linux/arm64` images under
 `ghcr.io/chrisalvir1/scryvex-pro-v2` when a `v*` Git tag is pushed.

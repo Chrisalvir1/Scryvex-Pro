@@ -53,7 +53,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            SCRYPTED_INSTALL_VERSION=0.144.2
+            SCRYPTED_INSTALL_VERSION=latest
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.value }}
           labels: |

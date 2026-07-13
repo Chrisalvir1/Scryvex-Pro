@@ -8,9 +8,9 @@ FROM ghcr.io/koush/scrypted-common:${BASE}
 
 WORKDIR /
 
-# Keep the Runtime reproducible. This is the official Scrypted server release
-# corresponding to the source baseline used by Scryvex Pro 3.9.0.
-ARG SCRYPTED_INSTALL_VERSION="0.144.2"
+# Follow the supported official installation channel. The historical 0.144.2
+# source baseline has no matching @scrypted/server package on npm.
+ARG SCRYPTED_INSTALL_VERSION="latest"
 RUN npx -y scrypted@latest install-server ${SCRYPTED_INSTALL_VERSION}
 
 WORKDIR /server
