@@ -3,6 +3,7 @@ import sdk, { ObjectDetector, Readme, ScryptedDeviceType, ScryptedInterface, Set
 import { StorageSettings, StorageSettingsDevice } from "@scrypted/sdk/storage-settings";
 import { HomekitMixin } from "./homekit-mixin";
 import { getDebugMode } from "./types/camera/camera-debug-mode-storage";
+import { selectHksv2026RemuxProfile } from './types/camera/hksv-2026-policy';
 
 const { systemManager, deviceManager, log } = sdk;
 
@@ -84,6 +85,32 @@ ${this.storageSettings.values.qrCode}
 
     async getMixinSettings(): Promise<Setting[]> {
         const settings: Setting[] = [];
+
+        // Read-only capability evidence. The HAP controller remains unchanged until
+        // its HEVC tier extension is implemented and protocol-tested.
+        try {
+            const streams = await this.mixinDevice.getVideoStreamOptions();
+            const h264 = selectHksv2026RemuxProfile(streams, 'h264');
+            const h265 = selectHksv2026RemuxProfile(streams, 'h265');
+            settings.push({
+                title: 'HKSV 2026 Remux Readiness',
+                subgroup: 'Scryvex Pro',
+                key: 'hksv2026Readiness',
+                description: `H.264: ${h264.reason} H.265: ${h265.reason}`,
+                value: [h264, h265].filter(plan => plan.eligible).map(plan => `${plan.codec?.toUpperCase()} ${plan.tier.toUpperCase()}`).join(' | ') || 'Not eligible',
+                readonly: true,
+            });
+        }
+        catch (error) {
+            settings.push({
+                title: 'HKSV 2026 Remux Readiness',
+                subgroup: 'Scryvex Pro',
+                key: 'hksv2026Readiness',
+                description: 'No se pudieron leer los perfiles nativos de esta cámara.',
+                value: 'Unknown',
+                readonly: true,
+            });
+        }
 
         // settings.push({
         //     title: 'H265 Streams',
