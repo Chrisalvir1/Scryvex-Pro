@@ -1,7 +1,7 @@
 import './styles.css';
 
 const nativeOrigin = (import.meta.env.VITE_SCRYPTED_ORIGIN || window.location.origin).replace(/\/$/, '');
-const version = import.meta.env.VITE_SCRYVEX_VERSION || '4.0.0';
+const version = import.meta.env.VITE_SCRYVEX_VERSION || '3.9.0';
 const nativeUrl = `${nativeOrigin}/`;
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
