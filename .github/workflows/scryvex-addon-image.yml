@@ -12,7 +12,9 @@ on:
         type: string
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/scryvex-pro-v2
+  # OCI image references must be lowercase. GitHub preserves the account's
+  # display-case in github.repository_owner, so do not derive this value.
+  IMAGE_NAME: ghcr.io/chrisalvir1/scryvex-pro-v2
 
 jobs:
   publish:
