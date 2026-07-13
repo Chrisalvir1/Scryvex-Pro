@@ -1,16 +1,17 @@
 # Home Assistant Addon Configuration
-name: Scrypted
+name: Scryvex Pro
 version: "3.9.0"
-slug: scrypted
-description: Scrypted is a high performance home video integration and automation platform
-url: "https://github.com/koush/scrypted"
+slug: scryvex_pro
+description: Scryvex Pro uses the official Scrypted Runtime and official Scrypted plugins in an isolated add-on volume.
+url: "https://github.com/Chrisalvir1/Scryvex-Pro-V2"
 arch:
   - amd64
   - aarch64
 init: false
 ingress: true
 ingress_port: 11080
-panel_icon: mdi:memory
+panel_title: Scryvex Pro
+panel_icon: mdi:cctv
 hassio_api: true
 homeassistant_api: true
 ingress_stream: true
@@ -19,18 +20,19 @@ gpio: true
 usb: true
 uart: true
 video: true
-image: "ghcr.io/koush/scrypted"
+image: "ghcr.io/chrisalvir1/scryvex-pro-v2"
 environment:
   SCRYPTED_INSTALL_PLUGIN: "@scrypted/homeassistant"
-  SCRYPTED_VOLUME: "/data/scrypted_data"
-  SCRYPTED_NVR_VOLUME: "/data/scrypted_nvr"
+  # This add-on never reads the data directory of any other Scrypted install.
+  SCRYPTED_VOLUME: "/data/scryvex_pro/scrypted_data"
+  SCRYPTED_NVR_VOLUME: "/data/scryvex_pro/scrypted_nvr"
   SCRYPTED_ADMIN_ADDRESS: "172.30.32.2"
   SCRYPTED_ADMIN_USERNAME: "homeassistant"
   SCRYPTED_INSTALL_ENVIRONMENT: "ha"
 backup_exclude:
   - '*/server/**'
-  - '*/scrypted_nvr/**'
-  - '*/scrypted_data/plugins/**'
+  - '*/scryvex_pro/scrypted_nvr/**'
+  - '*/scryvex_pro/scrypted_data/plugins/**'
 map:
   - config:rw
   - media:rw
