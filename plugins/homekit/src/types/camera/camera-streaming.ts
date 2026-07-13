@@ -21,6 +21,7 @@ import { createReturnAudioSdp } from './camera-return-audio';
 import { startCameraStreamFfmpeg } from './camera-streaming-ffmpeg';
 import { CameraStreamingSession } from './camera-streaming-session';
 import { getStreamingConfiguration } from './camera-utils';
+import { assertHksv2026StrictRemuxStream } from './hksv-2026-policy';
 
 const { mediaManager } = sdk;
 
@@ -33,7 +34,8 @@ async function getPort(socketType: SocketType, address: string): Promise<{ socke
 export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCamera & VideoCameraConfiguration & Camera & Intercom,
     console: Console,
     storage: Storage,
-    homekitPlugin: HomeKitPlugin) {
+    homekitPlugin: HomeKitPlugin,
+    strictNativeRemux = false) {
     const sessions = new Map<string, CameraStreamingSession>();
     const twoWayAudio = device.interfaces?.includes(ScryptedInterface.Intercom);
 
@@ -281,15 +283,22 @@ export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCame
                 destination,
                 destinationId: session.prepareRequest.targetAddress,
                 destinationType: '@scrypted/homekit',
-                adaptive: true,
+                // Strict mode refuses an adaptive/derived stream. The validation
+                // below checks the stream actually returned by the runtime.
+                adaptive: !strictNativeRemux,
                 video: {
                     codec: 'h264',
                     bitrate: request.video.max_bit_rate * 1000,
                     // if these are sent as width/height rather than clientWidth/clientHeight,
                     // rebroadcast will always choose substream to treat it as a hard constraint.
                     // send as hint for adaptive bitrate.
-                    clientWidth: request.video.width,
-                    clientHeight: request.video.height,
+                    ...(strictNativeRemux ? {
+                        width: request.video.width,
+                        height: request.video.height,
+                    } : {
+                        clientWidth: request.video.width,
+                        clientHeight: request.video.height,
+                    }),
                 },
                 audio: {
                     // opus is the preferred/default codec, and can be repacketized to fit any request if in use.
@@ -302,6 +311,8 @@ export function createCameraStreamingDelegate(device: ScryptedDevice & VideoCame
 
             const mediaObject = await device.getVideoStream(mediaOptions);
             const videoInput = await mediaManager.convertMediaObjectToJSON<FFmpegInput>(mediaObject, ScryptedMimeTypes.FFmpegInput);
+            if (strictNativeRemux)
+                assertHksv2026StrictRemuxStream(videoInput.mediaStreamOptions || {}, request.video);
             let mediaStreamFeedback: MediaStreamFeedback;
             try {
                 // homekit mtu is unusable. webrtc uses 1200 due to weird cell networks, vpns, etc.

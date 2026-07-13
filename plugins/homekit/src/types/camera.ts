@@ -189,7 +189,10 @@ addSupportedType({
             };
         }
 
-        const delegate = createCameraStreamingDelegate(device, console, storage, homekitPlugin);
+        // This opt-in only affects the HomeKit delegate. It never changes the
+        // camera plugin, ONVIF/RTSP settings, or the normal fallback path.
+        const strictNativeRemux = storage.getItem('hksv2026NativeRemux') === 'true';
+        const delegate = createCameraStreamingDelegate(device, console, storage, homekitPlugin, strictNativeRemux);
 
         const controller = new CameraController({
             cameraStreamCount: 8,

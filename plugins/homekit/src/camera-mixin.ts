@@ -3,7 +3,7 @@ import sdk, { ObjectDetector, Readme, ScryptedDeviceType, ScryptedInterface, Set
 import { StorageSettings, StorageSettingsDevice } from "@scrypted/sdk/storage-settings";
 import { HomekitMixin } from "./homekit-mixin";
 import { getDebugMode } from "./types/camera/camera-debug-mode-storage";
-import { selectHksv2026RemuxProfile } from './types/camera/hksv-2026-policy';
+import { selectHksv2026NativeRemuxPlan, selectHksv2026RemuxProfile } from './types/camera/hksv-2026-policy';
 
 const { systemManager, deviceManager, log } = sdk;
 
@@ -92,6 +92,7 @@ ${this.storageSettings.values.qrCode}
             const streams = await this.mixinDevice.getVideoStreamOptions();
             const h264 = selectHksv2026RemuxProfile(streams, 'h264');
             const h265 = selectHksv2026RemuxProfile(streams, 'h265');
+            const nativeRemux = selectHksv2026NativeRemuxPlan(streams);
             settings.push({
                 title: 'HKSV 2026 Remux Readiness',
                 subgroup: 'Scryvex Pro',
@@ -99,6 +100,15 @@ ${this.storageSettings.values.qrCode}
                 description: `H.264: ${h264.reason} H.265: ${h265.reason}`,
                 value: [h264, h265].filter(plan => plan.eligible).map(plan => `${plan.codec?.toUpperCase()} ${plan.tier.toUpperCase()}`).join(' | ') || 'Not eligible',
                 readonly: true,
+            });
+            settings.push({
+                title: 'HKSV Native Remux (H.264 + Opus)',
+                subgroup: 'Scryvex Pro',
+                key: 'hksv2026NativeRemux',
+                description: `${nativeRemux.reason} ${nativeRemux.audio.reason} Este modo falla en vez de convertir si HomeKit solicita una resolución no nativa.`,
+                type: 'boolean',
+                value: this.storage.getItem('hksv2026NativeRemux') === 'true',
+                disabled: !nativeRemux.eligible,
             });
         }
         catch (error) {
